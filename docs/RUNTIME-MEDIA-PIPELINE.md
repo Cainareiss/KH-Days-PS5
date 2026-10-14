@@ -31,6 +31,12 @@ O renderer do título usa:
 - `tick_video(elapsed_ns)` uma vez por frame. O método respeita o FPS 8.24 do
   contêiner e recupera frames quando o render loop atrasa.
 
+O programa rastreado em `platform/ps5/title/khdaysps5.cpp` implementa o
+`VulkanExample` que faltava: cria renderização dinâmica Vulkan 1.3, pipelines
+de malha e vídeo, buffers uniformes, descriptor sets, atualiza o frame MODS e
+registra os draws no command buffer corrente. O quad de vídeo usa o contrato
+de vértices do shader `base/uioverlay` do template.
+
 O áudio é entregue como PCM assinado de 16 bits, estéreo, 48 kHz e em blocos de
 256 frames. Com `KHDAYS_PS5_NATIVE_BACKEND=ON`, `TemplatePs5AudioOutput` chama
 `audio_start()` do PS5 Vulkan Template; a implementação do template abre,
@@ -57,6 +63,12 @@ cmake --build build-ps5-media --target khdays-ps5-native-media-runtime -j 4
 Foram produzidas bibliotecas Prospero para os decodificadores, a ponte de
 assets, o backend de recursos Vulkan e o runtime nativo combinado.
 
+O script `scripts/prepare_ps5_vulkan_title.ps1` também gera `PPSA12345` pelo
+`new-title.py` oficial do template, sobrepõe o programa rastreado e injeta no
+alvo `samples` todos os fontes necessários. A compilação desse alvo gerado foi
+validada integralmente para Prospero: 47 de 47 unidades compiladas, incluindo
+o `VulkanExample`, a base Vulkan/VideoOut, KTX, os decodificadores e o runtime.
+
 ## Evidência no host
 
 O smoke test usa os assets reais staged em `build-full-game-data/data` e valida:
@@ -76,9 +88,10 @@ Comando:
 
 ## Limite desta validação
 
-O upload e os comandos de desenho estão implementados e compilam para
-Prospero, mas não foram executados em um PS5 nesta máquina. O `VulkanExample`
-final ainda precisa criar os pipelines/descriptor sets compatíveis, chamar os
-métodos de gravação no command buffer do swapchain e ser validado no console.
-Esse teste de console é necessário antes de afirmar que a renderização ou o
-áudio funcionam no hardware.
+O upload, os pipelines, descriptors e comandos de desenho estão implementados
+e compilam juntos para Prospero, mas não foram executados em um PS5 nesta
+máquina. O link RADV final ainda depende da revisão do Payload SDK fixada pelo
+template; sua instalação requer symlinks Unix que o volume exFAT `E:` não
+preserva. Essa etapa deve ser executada em NTFS/WSL. Depois disso, o teste no
+console continua obrigatório antes de afirmar que renderização ou áudio
+funcionam no hardware.

@@ -54,5 +54,7 @@ host/compiler/linker local; ainda não valida execução no console.
 
 Depois, o `core/` do projeto e `khdays-ps5-native-media-runtime` foram
 compilados com `toolchain/prospero.cmake`. Os objetos são ELF relocatable
-x86-64. A ligação do título Vulkan final ainda depende do SDK fixado, do RADV
-e do `VulkanExample` que cria os pipelines e descriptor sets.
+x86-64. O título `PPSA12345` também foi gerado pelo `new-title.py` oficial e
+seu alvo `samples`, já com o `VulkanExample`, pipelines, descriptors e runtime,
+compilou as 47 unidades para Prospero. A ligação do ELF/FSELF Vulkan final
+ainda depende do SDK fixado e do RADV.

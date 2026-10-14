@@ -35,6 +35,7 @@ MODS, KAPH/NSBMD, NCLR e NCGR. O catálogo gerado por
 
 Essa ponte agora alimenta `RuntimeMediaPipeline`, `VulkanMediaBackend` e
 `NativeMediaRuntime`. A integração de upload Vulkan, saída nativa de áudio e
-frames MODS está descrita em `RUNTIME-MEDIA-PIPELINE.md`. O jogo ainda não é uma
-build completa: faltam os pipelines do título final, a ligação de todas as
-missões e a validação no console.
+frames MODS está descrita em `RUNTIME-MEDIA-PIPELINE.md`. Os pipelines e o
+command buffer do título final já estão ligados; o jogo ainda não é uma build
+completa porque faltam o fluxo de todas as missões, o link RADV final e a
+validação no console.

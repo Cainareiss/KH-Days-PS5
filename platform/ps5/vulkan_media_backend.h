@@ -52,7 +52,7 @@ public:
         VkVertexInputAttributeDescription (&attributes)[5]);
     static VkVertexInputBindingDescription video_binding_description();
     static void video_attribute_descriptions(
-        VkVertexInputAttributeDescription (&attributes)[2]);
+        VkVertexInputAttributeDescription (&attributes)[3]);
 
     void shutdown();
 

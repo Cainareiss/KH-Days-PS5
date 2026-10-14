@@ -54,9 +54,11 @@ direta para VideoOut, controles, áudio e Vulkan.
 ## Bloqueios atuais
 
 - A toolchain pública, o PS5 Payload SDK e o PS5 Vulkan Template já estão
-  instalados localmente, e as bibliotecas de mídia compilam para Prospero.
-- O `VulkanExample` final ainda precisa ligar pipelines/descriptors e os draws
-  do backend de mídia ao command buffer do swapchain.
+  instalados localmente. O `VulkanExample`, pipelines, descriptors, backend de
+  mídia e decodificadores compilam juntos para Prospero (47/47 unidades).
+- O link RADV final depende da revisão do Payload SDK fixada pelo template. A
+  instalação dessa revisão precisa de NTFS/WSL porque o volume exFAT atual não
+  consegue materializar os symlinks Unix do SDK.
 - Não há execução automatizada neste workspace contra um PS5 homebrew. Sem o
   teste no console não é possível afirmar que Vulkan/VideoOut ou `sceAudioOut`
   funcionam no hardware.

@@ -20,6 +20,7 @@ namespace {
 struct VideoVertex final {
     std::array<float, 2> position;
     std::array<float, 2> texcoord;
+    std::array<float, 4> color;
 };
 
 bool rgba_size_is_valid(const std::uint32_t width,
@@ -156,10 +157,10 @@ public:
             return true;
         }
         constexpr std::array<VideoVertex, 4> vertices{{
-            {{{-1.0f, -1.0f}}, {{0.0f, 1.0f}}},
-            {{{ 1.0f, -1.0f}}, {{1.0f, 1.0f}}},
-            {{{ 1.0f,  1.0f}}, {{1.0f, 0.0f}}},
-            {{{-1.0f,  1.0f}}, {{0.0f, 0.0f}}},
+            {{{-1.0f, -1.0f}}, {{0.0f, 1.0f}}, {{1.0f, 1.0f, 1.0f, 1.0f}}},
+            {{{ 1.0f, -1.0f}}, {{1.0f, 1.0f}}, {{1.0f, 1.0f, 1.0f, 1.0f}}},
+            {{{ 1.0f,  1.0f}}, {{1.0f, 0.0f}}, {{1.0f, 1.0f, 1.0f, 1.0f}}},
+            {{{-1.0f,  1.0f}}, {{0.0f, 0.0f}}, {{1.0f, 1.0f, 1.0f, 1.0f}}},
         }};
         constexpr std::array<std::uint32_t, 6> indices{{0, 1, 2, 2, 3, 0}};
         vks::Buffer vertex_staging{};
@@ -391,11 +392,13 @@ VulkanMediaBackend::video_binding_description() {
 }
 
 void VulkanMediaBackend::video_attribute_descriptions(
-    VkVertexInputAttributeDescription (&attributes)[2]) {
+    VkVertexInputAttributeDescription (&attributes)[3]) {
     attributes[0] = {0U, 0U, VK_FORMAT_R32G32_SFLOAT,
                      offsetof(VideoVertex, position)};
     attributes[1] = {1U, 0U, VK_FORMAT_R32G32_SFLOAT,
                      offsetof(VideoVertex, texcoord)};
+    attributes[2] = {2U, 0U, VK_FORMAT_R32G32B32A32_SFLOAT,
+                     offsetof(VideoVertex, color)};
 }
 
 void VulkanMediaBackend::shutdown() {

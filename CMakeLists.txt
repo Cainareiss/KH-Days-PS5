@@ -110,6 +110,21 @@ if(KHDAYS_ENABLE_PC_ASSET_DECODERS)
             khdays-ps5-core
             khdays-ps5-asset-bridge
             khdays-ps5-vulkan-media-backend)
+
+        if(KHDAYS_PS5_NATIVE_BACKEND)
+            add_library(khdays-ps5-vulkan-title-program OBJECT
+                platform/ps5/title/khdaysps5.cpp)
+            target_compile_features(khdays-ps5-vulkan-title-program PUBLIC cxx_std_20)
+            target_compile_definitions(khdays-ps5-vulkan-title-program PRIVATE
+                VK_EXAMPLE_PS5=1
+                _DIRECT2DISPLAY=1)
+            target_include_directories(khdays-ps5-vulkan-title-program PRIVATE
+                "${KHDAYS_PS5_VULKAN_TEMPLATE_ROOT}/external/glm"
+                "${KHDAYS_PS5_VULKAN_TEMPLATE_ROOT}/external/imgui"
+                "${KHDAYS_PS5_VULKAN_TEMPLATE_ROOT}/external/tinygltf")
+            target_link_libraries(khdays-ps5-vulkan-title-program PRIVATE
+                khdays-ps5-native-media-runtime)
+        endif()
     endif()
 endif()
 

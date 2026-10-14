@@ -19,22 +19,30 @@ PS5.**
 - conversão/reamostragem para PCM16 estéreo a 48 kHz e ligação ao
   `audio_start()` nativo, cuja implementação do template usa `sceAudioOut`;
 - agendamento de frames MODS pelo FPS do contêiner;
+- programa final `VulkanExample` criado com renderização dinâmica Vulkan 1.3,
+  pipelines de malha/vídeo, layouts, descriptors e gravação no command buffer;
+- ligação do loop de frame ao upload de modelos, apresentação MODS e áudio
+  `sceAudioOut`, usando `/app0/data` como raiz no PS5;
+- gerador reproduzível do título `PPSA12345` sobre o
+  `PS5_VulkanTemplate`, sem versionar SDK ou dados proprietários;
 - smoke test com assets reais aprovado: 12 texturas, 13 malhas, dois frames de
   vídeo e áudio não silencioso;
-- build Prospero de `khdays-ps5-native-media-runtime` aprovado.
+- build Prospero de `khdays-ps5-native-media-runtime` aprovado;
+- compilação integral do alvo `samples` gerado aprovada: 47/47 unidades,
+  incluindo título, Vulkan Template, decodificadores e runtime de mídia.
 
 Os detalhes e comandos reproduzíveis estão em
 [`docs/RUNTIME-MEDIA-PIPELINE.md`](docs/RUNTIME-MEDIA-PIPELINE.md).
 
 ## Ainda pendente
 
-- criar no `VulkanExample` final os pipelines e descriptor sets de malha/vídeo
-  e gravar os draws no command buffer do swapchain;
 - ligar o catálogo, scripts e transições ao loop completo de todas as missões;
 - integrar fontes, HUD e todas as telas 2D ao renderer final;
+- instalar a revisão do Payload SDK fixada pelo template em NTFS/WSL e concluir
+  o link RADV do ELF/FSELF; o volume exFAT atual não preserva os symlinks Unix;
 - testar Vulkan/VideoOut, DualSense e `sceAudioOut` no PS5 homebrew real;
 - somente após o teste no console, reconstruir uma distribuição exFAT válida.
 
-As bibliotecas terem compilado para Prospero comprova compatibilidade de
-compilação, não funcionamento no console. Nenhum resultado de hardware é
-declarado sem teste real.
+A compilação das 47 unidades para Prospero comprova compatibilidade do código
+fonte, não funcionamento no console. O link final e o teste em hardware ainda
+são obrigatórios; nenhum resultado de hardware é declarado sem teste real.
