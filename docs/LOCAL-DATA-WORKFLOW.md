@@ -45,6 +45,19 @@ Repita com `-Language fr` quando a imagem possuir francês. Um resultado com
 fontes, título, menus, save e áudio estão presentes; não significa ainda que o
 backend PS5 esteja compilado.
 
+Para preparar uma carga reproduzível para o runtime, copie somente os recursos
+do front-end para uma pasta de staging local:
+
+```powershell
+.\tools\stage_frontend_data.ps1 `
+  -Root "E:\path\khdays-port\data\extracted\<HASH16>\nitrofs" `
+  -Output "E:\path\frontend-staging" `
+  -Language en
+```
+
+O script preserva os caminhos internos, rejeita recursos obrigatórios ausentes
+e cria `frontend-stage.json`. A pasta de saída deve continuar fora do Git.
+
 ## Resultado desta imagem
 
 A revisão USA `YKGE` fornecida localmente passou a validação do front-end para
