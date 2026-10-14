@@ -11,6 +11,7 @@
 - lista de recursos necessários para logos, título, menus, save e seleção;
 - regras para não versionar ROM, assets extraídos, SDK ou binários;
 - diagnóstico do host e da ausência da toolchain PS5.
+- manifesto dos recursos do front-end e verificador por idioma.
 
 ## Ainda pendente
 

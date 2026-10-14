@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "virtual_screen": { "width": 256, "height": 192, "refresh_hz": 59.8261 },
+  "languages": ["de", "en", "es", "fr", "it"],
+  "scenes": [
+    {
+      "id": 1,
+      "name": "BootLogoScene",
+      "resources": [
+        { "path": "ttl/ttl.p2", "kind": "container", "required": true }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "OpeningScene",
+      "resources": [
+        { "path": "mv/802.mods", "kind": "movie", "required": true },
+        { "path": "op/op.p2", "kind": "container", "required": true },
+        { "path": "text/font_eu_10all.nftr", "kind": "font", "required": true },
+        { "path": "db/db_&.p2", "kind": "messages", "required": true }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "TitleScene",
+      "resources": [
+        { "path": "ttl/ttl.p2", "kind": "container", "required": true },
+        { "path": "ttl/ttl_&.p2", "kind": "localized-container", "required": false },
+        { "path": "snd/sound_data.sdat", "kind": "audio", "required": true }
+      ]
+    },
+    {
+      "id": 19,
+      "name": "MainMenuScene",
+      "resources": [
+        { "path": "UI/mlt/res.p2", "kind": "container", "required": true },
+        { "path": "UI/mlt/mlt_&.s.z", "kind": "localized-strings", "required": true },
+        { "path": "text/font_eu_08.nftr", "kind": "font", "required": true }
+      ]
+    },
+    {
+      "id": 100,
+      "name": "SaveFileScene",
+      "resources": [
+        { "path": "UI/cm/cm_save.ui.z", "kind": "layout", "required": true },
+        { "path": "UI/cm/cmo_&.p2", "kind": "localized-container", "required": true }
+      ]
+    }
+  ]
+}
+

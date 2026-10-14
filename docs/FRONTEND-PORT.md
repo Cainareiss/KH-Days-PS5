@@ -67,3 +67,11 @@ O contrato agnóstico de plataforma está em
 implementação concreta depende do SDK público PS5 e será adicionada depois do
 teste “Hello Vulkan”.
 
+O inventário mínimo de arquivos está em
+[`frontend-resources.json`](frontend-resources.json). Depois de extrair os dados
+do próprio usuário, valide-os com:
+
+```powershell
+.\tools\check_frontend_data.ps1 -Root .\data\extracted -Language en
+```
+
