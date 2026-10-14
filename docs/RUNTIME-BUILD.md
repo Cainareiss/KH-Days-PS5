@@ -34,3 +34,21 @@ um ZIP de instalação/teste. O resultado é fake-signed para homebrew/debug.
 Um PKG retail válido exige ferramentas e assinatura da cadeia oficial da
 Sony, que não fazem parte do SDK público. Não é seguro gerar um arquivo com
 extensão `.pkg` a partir do ZIP: o PS5 o rejeitaria como corrompido.
+## Hierarquia USB do homebrew
+
+Para uso por USB com ShadowMountPlus ou loader compatível, copie a pasta
+`homebrew` inteira para a raiz do dispositivo exFAT:
+
+```
+USB:\homebrew\PPSA12345\eboot.bin
+USB:\homebrew\PPSA12345\sce_sys\param.json
+USB:\homebrew\PPSA12345\data\...
+```
+
+`PPSA12345` segue o formato aceito de identificador (`PPSA` + cinco dígitos)
+e é um ID de teste reservado para este homebrew; não é um Title ID oficial da
+Sony. O `param.json` inclui `titleId`, `conceptId` e `contentId` coerentes.
+
+O pacote não inventa `sce_module/libc.prx`: esse módulo precisa vir de um
+ambiente/dump compatível fornecido pelo desenvolvedor. Sem ele, o loader pode
+enxergar a pasta, mas o executável ainda pode falhar ao iniciar.

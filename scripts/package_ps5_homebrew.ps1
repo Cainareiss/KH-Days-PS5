@@ -3,7 +3,8 @@ param(
     [string]$Elf = "..\build-ps5-runtime\khdays-days-runtime.elf",
     [string]$SdkRoot = "..\toolchains\ps5-payload-sdk-v0.44\ps5-payload-sdk",
     [string]$OutputRoot = "..\build-ps5-app",
-    [string]$TitleId = "PPSA12345"
+    [string]$TitleId = "PPSA12345",
+    [string]$LibcPrx = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,6 +34,7 @@ python $fselfTool --ptype fake --paid 0x3800000000000022 `
 
 $param = @{
     titleId = $TitleId
+    conceptId = $TitleId
     titleName = "KH Days PS5 (WIP)"
     version = "01.00"
     contentId = "UP0001-${TitleId}_00-KHDAYSWIP000001"
@@ -40,6 +42,18 @@ $param = @{
     parentalLevel = 1
 } | ConvertTo-Json
 Set-Content -LiteralPath (Join-Path $sceSysPath "param.json") -Value $param -Encoding utf8
+
+if ($LibcPrx -ne "") {
+    $libcPath = [System.IO.Path]::GetFullPath($LibcPrx)
+    if (-not (Test-Path -LiteralPath $libcPath -PathType Leaf)) {
+        throw "libc.prx não encontrado: $libcPath"
+    }
+    $modulePath = Join-Path $stagePath "sce_module"
+    New-Item -ItemType Directory -Force -Path $modulePath | Out-Null
+    Copy-Item -LiteralPath $libcPath -Destination (Join-Path $modulePath "libc.prx") -Force
+} else {
+    Write-Warning "sce_module/libc.prx não foi incluído; um título nativo pode não iniciar sem o módulo compatível com o firmware."
+}
 
 $zipPath = Join-Path $outputPath "$TitleId-homebrew.zip"
 if (Test-Path -LiteralPath $zipPath) {

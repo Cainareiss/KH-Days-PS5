@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$BundleRoot = "..\build-ps5-app\PPSA12345",
-    [string]$OutputRoot = "..\build-ps5-exfat\PPSA12345",
+    [string]$OutputRoot = "..\build-ps5-exfat-final\homebrew\PPSA12345",
     [string]$UsbRoot = "",
     [string]$AssetRoot = "E:\DOCUMENTOS\KH-ReCoded-PTBR\tools\khdays-port\data\extracted\3cbbe3f15b49fc26\nitrofs"
 )
@@ -49,7 +49,7 @@ $assetReport | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $dataDestina
 Set-Content -LiteralPath (Join-Path $destination "README-EXFAT.txt") -Encoding utf8 -Value @"
 KH-Days-PS5 WIP - bundle homebrew
 
-Esta pasta foi preparada para ser copiada para um dispositivo exFAT. Ela não
+Copie a pasta homebrew inteira para a raiz de um dispositivo exFAT. Ela não
 formata o dispositivo e não altera nenhum arquivo fora da pasta de saída.
 O carregador homebrew deve apontar para eboot.bin; não renomeie este arquivo
 para PKG. Os assets em data/ são dados extraídos locais e ainda dependem dos
@@ -61,7 +61,7 @@ if ($UsbRoot -ne "") {
     if (-not (Test-Path -LiteralPath $usb -PathType Container)) {
         throw "Destino USB não encontrado: $usb"
     }
-    $usbTarget = Join-Path $usb "PPSA12345"
+    $usbTarget = Join-Path $usb "homebrew\PPSA12345"
     New-Item -ItemType Directory -Force -Path $usbTarget | Out-Null
     Copy-Item -LiteralPath (Join-Path $destination "*") -Destination $usbTarget -Recurse -Force
     Write-Host "Copiado para: $usbTarget"
