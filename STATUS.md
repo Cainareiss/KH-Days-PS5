@@ -59,3 +59,11 @@ testes do proprietário do console, não versionado aqui.
 - Essa etapa não gera exFAT nem altera a saída de empacotamento.
 - O runtime ainda é uma fatia vertical: decodificadores P2/CAKP/Z, NFTR,
   NSBMD/NSBTX, SDAT e MODS e a integração de todos os mundos continuam pendentes.
+
+## Ponte de decodificadores
+
+- biblioteca opcional `khdays-pc-asset-decoders` integrada ao CMake;
+- `AssetDecodeBridge` valida P2/LZ, CAKP/KAPH, 2D, NSBMD/TEX0, NFTR, SDAT e MODS;
+- smoke test aprovado com assets reais em `build-asset-bridge-vs`;
+- catálogo gerado para 114 missões e 10 mundos;
+- upload Vulkan, mixer PS5 e reprodução efetiva de vídeo ainda não estão concluídos.
