@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$BundleRoot = "..\build-ps5-app\PPSA99360",
-    [string]$OutputRoot = "..\build-ps5-exfat\PPSA99360",
+    [string]$BundleRoot = "..\build-ps5-app\PPSA12345",
+    [string]$OutputRoot = "..\build-ps5-exfat\PPSA12345",
     [string]$UsbRoot = "",
     [string]$AssetRoot = "E:\DOCUMENTOS\KH-ReCoded-PTBR\tools\khdays-port\data\extracted\3cbbe3f15b49fc26\nitrofs"
 )
@@ -61,7 +61,7 @@ if ($UsbRoot -ne "") {
     if (-not (Test-Path -LiteralPath $usb -PathType Container)) {
         throw "Destino USB não encontrado: $usb"
     }
-    $usbTarget = Join-Path $usb "PPSA99360"
+    $usbTarget = Join-Path $usb "PPSA12345"
     New-Item -ItemType Directory -Force -Path $usbTarget | Out-Null
     Copy-Item -LiteralPath (Join-Path $destination "*") -Destination $usbTarget -Recurse -Force
     Write-Host "Copiado para: $usbTarget"
