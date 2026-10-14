@@ -34,6 +34,14 @@ PS5.**
 Os detalhes e comandos reproduzíveis estão em
 [`docs/RUNTIME-MEDIA-PIPELINE.md`](docs/RUNTIME-MEDIA-PIPELINE.md).
 
+## Atualizacao da toolchain (14/10/2026)
+
+- A revisao do Payload SDK fixada pelo template (`b83202be73e930050e00de0f1b4d9ec46c0391bf`)
+  foi instalada em `D:\\KH-Days-PS5-toolchain\\ps5-payload-sdk-b832` (NTFS).
+- O zlib 1.3.2 foi compilado e registrado no cache nativo.
+- O link RADV ainda depende de `LLVMSPIRVLib`/Mesa CLC, ausentes no LLVM local;
+  nenhuma biblioteca RADV incompleta foi incluida no titulo.
+
 ## Ainda pendente
 
 - ligar o catálogo, scripts e transições ao loop completo de todas as missões;
