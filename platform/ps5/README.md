@@ -1,18 +1,20 @@
-# Backend PS5 (esqueleto)
+# Backend PS5
 
-Este diretório reserva o adaptador de plataforma. Ele ainda não contém código
-compilável porque a máquina atual não possui o PS5 Payload SDK nem o compilador
-Prospero. Adicionar `#ifdef PS5` ao backend PC antes de validar a toolchain
-criaria um caminho impossível de testar.
+O backend tem três pontos concretos de integração:
 
-Quando a toolchain estiver disponível, a implementação deve ser dividida em:
+- `file_resource_provider.*` lê a árvore extraída do título (`/app0`) e bloqueia
+  caminhos absolutos ou `..` que escapem da raiz;
+- `audio_output.*` usa o contrato público `audio_start/audio_stop` do
+  `PS5_VulkanTemplate` (PCM estéreo S16, 48 kHz, blocos de 256 frames);
+- `vulkan_videoout_adapter.*` liga o núcleo aos callbacks do swapchain Vulkan e
+  da apresentação VideoOut já criados pelo executável PS5.
 
-- `ps5_video_vulkan.*`: device, swapchain, barriers e apresentação;
-- `ps5_input.*`: leitura de controle e mapeamento para eventos neutros;
-- `ps5_audio.*`: fila de PCM e sincronização de áudio;
-- `ps5_filesystem.*`: diretório de dados do título e saves;
-- `ps5_main.cpp`: bootstrap mínimo do título.
+O adaptador não copia headers proprietários nem cria símbolos Sony falsos. O
+executável final deve fornecer os callbacks depois de inicializar o
+`VulkanExampleBase`/swapchain do template; `present` só retorna sucesso quando
+essa ponte realmente apresentou o frame. O build de Windows usa a mesma
+interface, mas não finge ter dispositivo Vulkan/áudio PS5.
 
-O primeiro teste deve ser um “Hello Vulkan” sem dados do jogo. Depois o
-front-end neutralizado do `khdays-port` será ligado gradualmente.
-
+`Frame::assets` entrega os bytes brutos dos recursos requeridos ao renderer.
+P2, NFTR, `.z` e outros formatos ainda precisam de decodificadores próprios
+antes de virarem texturas/fontes; nenhum arquivo original é sobrescrito.

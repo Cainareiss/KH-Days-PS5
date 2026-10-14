@@ -268,6 +268,15 @@ void Core::render(Renderer& renderer) const {
         config_.virtual_width, config_.virtual_height, config_.output_width,
         config_.output_height, config_.integer_nearest);
     frame.resources = scene_resources();
+    frame.assets.reserve(frame.resources.size());
+    for (const auto& resource : frame.resources) {
+        ResourceData data;
+        data.path = resource.path;
+        data.kind = resource.kind;
+        data.required = resource.required;
+        data.loaded = resources_.read(resource.path, data.bytes);
+        frame.assets.push_back(std::move(data));
+    }
     renderer.draw(frame);
 }
 

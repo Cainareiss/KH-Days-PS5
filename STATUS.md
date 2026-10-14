@@ -23,6 +23,17 @@
 - loop `FrontendSession` integrado ao adaptador PS5 e compilado também como biblioteca estática com `prospero.cmake`.
 - saída 4K configurada no contrato (`3840x2160`) com viewport 4:3 e escala inteira do framebuffer original.
 
+## Backend de plataforma implementado neste marco
+
+- `FileResourceProvider` lê assets reais da raiz `/app0` com proteção contra
+  traversal de caminhos;
+- `TemplatePs5AudioOutput` segue o contrato PCM do template (`sceAudioOut`)
+  quando `KHDAYS_PS5_NATIVE_BACKEND` for ativado;
+- `VulkanVideoOutAdapter` fornece a ponte de inicialização, desenho, present e
+  sincronização para o swapchain Vulkan/VideoOut real;
+- o núcleo entrega bytes brutos em `Frame::assets` e a sessão inicializa o
+  adaptador em `3840x2160`.
+
 ## Ainda pendente
 
 - instalar e fixar `ps5-payload-dev/sdk` e o compilador Prospero;

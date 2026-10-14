@@ -73,10 +73,26 @@ struct ResourceRef final {
     bool required = true;
 };
 
+struct ResourceData final {
+    std::string path;
+    std::string kind;
+    bool required = true;
+    bool loaded = false;
+    std::vector<std::uint8_t> bytes;
+};
+
 class ResourceProvider {
 public:
     virtual ~ResourceProvider() = default;
     [[nodiscard]] virtual bool contains(std::string_view path) const = 0;
+    // Providers that can read title data override this. The default keeps the
+    // lightweight manifest-only providers used by tests and tools compatible.
+    virtual bool read(std::string_view path,
+                      std::vector<std::uint8_t>& bytes) const {
+        (void)path;
+        bytes.clear();
+        return false;
+    }
 };
 
 struct Frame final {
@@ -89,6 +105,9 @@ struct Frame final {
     std::uint32_t output_height = 2160;
     Viewport viewport{};
     std::vector<ResourceRef> resources;
+    // Bytes are staged for the platform renderer. Decoding proprietary P2,
+    // NFTR and .z formats remains a renderer/asset-pipeline concern.
+    std::vector<ResourceData> assets;
 };
 
 class Renderer {

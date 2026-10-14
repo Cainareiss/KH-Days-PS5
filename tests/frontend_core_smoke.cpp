@@ -16,6 +16,15 @@ public:
             || path == "UI/cm/cm_save.ui.z"
             || path == "UI/cm/cmo_en.p2";
     }
+
+    bool read(const std::string_view path,
+              std::vector<std::uint8_t>& bytes) const override {
+        if (!contains(path)) {
+            return false;
+        }
+        bytes = {0x4b, 0x48, 0x44, 0x53};
+        return true;
+    }
 };
 
 class TestRenderer final : public Renderer {
@@ -27,7 +36,12 @@ public:
 
 class TestAdapter final : public khdays::platform::ps5::FrontendAdapter {
 public:
-    bool initialize(const int, const int) override { initialized = true; return true; }
+    bool initialize(const int width, const int height) override {
+        initialized = true;
+        output_width = width;
+        output_height = height;
+        return true;
+    }
     Input poll_input() override {
         return frame_count++ == 0 ? Input::one(Button::Start) : Input{};
     }
@@ -38,6 +52,8 @@ public:
 
     bool initialized = false;
     bool shutdown_called = false;
+    int output_width = 0;
+    int output_height = 0;
     int frame_count = 0;
     int draws = 0;
     int presents = 0;
@@ -57,6 +73,9 @@ int main() {
     core.render(renderer);
     assert(renderer.last.scene == SceneId::BootLogo);
     assert(renderer.last.resources.size() == 1);
+    assert(renderer.last.assets.size() == 1);
+    assert(renderer.last.assets.front().loaded);
+    assert(renderer.last.assets.front().bytes.size() == 4);
     assert(renderer.last.output_width == 3840);
     assert(renderer.last.output_height == 2160);
     assert(renderer.last.viewport.x == 512);
@@ -88,6 +107,7 @@ int main() {
     assert(session.start(&error));
     assert(session.frame());
     assert(adapter.initialized && adapter.presents == 1);
+    assert(adapter.output_width == 3840 && adapter.output_height == 2160);
     assert(adapter.last.scene == SceneId::Title);
     assert(adapter.last_wait_ns > 0);
     session.shutdown();

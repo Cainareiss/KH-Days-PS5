@@ -11,7 +11,8 @@ FrontendSession::FrontendSession(
     : adapter_(adapter), config_(std::move(config)), core_(config_, resources) {}
 
 bool FrontendSession::start(std::string* error) {
-    if (!adapter_.initialize(config_.virtual_width, config_.virtual_height)) {
+    if (!adapter_.initialize(static_cast<int>(config_.output_width),
+                             static_cast<int>(config_.output_height))) {
         if (error != nullptr) {
             *error = "PS5 frontend adapter initialization failed";
         }

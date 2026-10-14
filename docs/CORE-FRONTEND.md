@@ -11,8 +11,24 @@ SDL e das APIs do PS5:
 - atalho por START/Confirm e navegação Up/Down/Cancel;
 - validação de recursos obrigatórios antes de entrar em cada cena;
 - interfaces `ResourceProvider` e `Renderer` para o backend PC ou PS5.
+- `ResourceProvider::read` e `Frame::assets`, que fazem o staging dos bytes
+  brutos de cada recurso para o renderer sem embutir dados do jogo;
 - `FrontendSession`, que conecta input, render, apresentação e clock ao
   `FrontendAdapter` sem vazar APIs do SDK para o núcleo.
+
+## Integração PS5 real
+
+`platform/ps5/vulkan_videoout_adapter.*` fornece a ponte para um swapchain
+Vulkan/VideoOut real. O título PS5 injeta callbacks para inicializar a janela,
+ler o DualSense, registrar o frame, apresentar e esperar o próximo vblank. Isso
+mantém `VkDevice`/`VkSwapchainKHR` dentro do renderer PS5, sem contaminar o
+núcleo portátil.
+
+`platform/ps5/audio_output.*` segue o fluxo do template PS5: `sceAudioOutInit`,
+`sceAudioOutOpen` em 48 kHz estéreo, callback em grains de 256 frames e
+`sceAudioOutClose` no encerramento. A implementação só é ativada ao compilar o
+executável final com `KHDAYS_PS5_NATIVE_BACKEND` e ligar o `platform.c` do
+template; no host ela retorna falso deliberadamente.
 
 ## Saída 4K
 
