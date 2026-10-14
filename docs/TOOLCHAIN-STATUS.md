@@ -43,3 +43,8 @@ O `-nostartfiles` é necessário neste primeiro teste porque o wrapper v0.44 e
 o Clang 23 encontraram o `crt1.o` automático e o manual duplicado. O ELF foi
 inspecionado como ELF64 x86-64, ABI FreeBSD, tipo `SharedObject`. Isso valida o
 host/compiler/linker local; ainda não valida execução no console.
+
+Depois, o `core/` do projeto foi compilado com `toolchain/prospero.cmake` como
+`build-ps5-core/libkhdays-ps5-core.a`. O objeto é ELF relocatable x86-64. A
+ligação de um executável ainda depende do backend PS5 e de uma rotina de
+entrada/runtime adequada.

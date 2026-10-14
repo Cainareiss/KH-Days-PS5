@@ -24,3 +24,8 @@ O smoke test percorre as transições do título, salvamento, seleção de
 personagem/menu e entrada no gameplay usando um provedor de dados falso. Ele
 valida a lógica do núcleo, não a execução no console nem a presença de assets
 proprietários.
+
+O mesmo alvo foi configurado com `toolchain/prospero.cmake` e compilado como
+`build-ps5-core/libkhdays-ps5-core.a`. O objeto interno foi reconhecido pelo
+LLVM como ELF relocatable `x86_64`; essa etapa comprova a compilação cruzada do
+núcleo, mas ainda não liga VideoOut/Vulkan nem produz um executável carregável.
