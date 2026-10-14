@@ -18,6 +18,7 @@
 - baseline PC compilada com Visual Studio/CMake; logos, título, seleção de personagem e salvamento renderizados com os assets reais da revisão USA.
 - detalhes e limites registrados em `docs/PC-FRONTEND-BASELINE.md`.
 - auditoria da fronteira SDL/port neutro registrada em `docs/PC-PS5-API-AUDIT.md`.
+- fontes públicas da toolchain baixadas localmente; estado registrado em `docs/TOOLCHAIN-STATUS.md`.
 
 ## Ainda pendente
 
