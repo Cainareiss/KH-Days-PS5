@@ -1,5 +1,6 @@
 # Build and generated files
 build/
+build-*/
 out/
 dist/
 .cache/
