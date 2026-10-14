@@ -35,7 +35,7 @@ $param = @{
     titleId = $TitleId
     titleName = "KH Days PS5 (WIP)"
     version = "01.00"
-    contentId = "UP0001-$TitleId_00-KHDAYSWIP000001"
+    contentId = "UP0001-${TitleId}_00-KHDAYSWIP000001"
     applicationCategoryType = 1
     parentalLevel = 1
 } | ConvertTo-Json
