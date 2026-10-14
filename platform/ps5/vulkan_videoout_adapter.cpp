@@ -35,6 +35,19 @@ void VulkanVideoOutAdapter::draw(const khdays::ps5::frontend::Frame& frame) {
     }
 }
 
+void VulkanVideoOutAdapter::draw_world(
+    const khdays::ps5::world::WorldFrame& frame) {
+    if (!initialized_ || hooks_.draw_world == nullptr) {
+        frame_ok_ = false;
+        fail("Vulkan world draw hook is unavailable");
+        return;
+    }
+    frame_ok_ = hooks_.draw_world(hooks_.user, frame);
+    if (!frame_ok_) {
+        fail("Vulkan world frame recording failed");
+    }
+}
+
 void VulkanVideoOutAdapter::present() {
     if (!initialized_ || hooks_.present == nullptr) {
         frame_ok_ = false;

@@ -18,3 +18,7 @@ interface, mas não finge ter dispositivo Vulkan/áudio PS5.
 `Frame::assets` entrega os bytes brutos dos recursos requeridos ao renderer.
 P2, NFTR, `.z` e outros formatos ainda precisam de decodificadores próprios
 antes de virarem texturas/fontes; nenhum arquivo original é sobrescrito.
+
+O `WorldFrame` também lista os assets do primeiro mundo (`mi/wd/wd_tt`, HUD,
+fonte, modelo do Roxas e dados de missão) para que o callback Vulkan faça a
+leitura sob `/app0` e mantenha cache GPU.

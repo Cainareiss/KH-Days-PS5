@@ -1,6 +1,7 @@
 #pragma once
 
 #include "frontend_adapter.h"
+#include "khdays_ps5/world_runtime.h"
 
 #include <cstdint>
 
@@ -17,12 +18,15 @@ struct VulkanVideoOutHooks final {
     khdays::ps5::frontend::Input (*poll_input)(void* user) = nullptr;
     bool (*draw_frame)(void* user,
                        const khdays::ps5::frontend::Frame& frame) = nullptr;
+    bool (*draw_world)(void* user,
+                       const khdays::ps5::world::WorldFrame& frame) = nullptr;
     bool (*present)(void* user) = nullptr;
     void (*wait_for_next_frame)(void* user, std::int64_t duration_ns) = nullptr;
     void (*shutdown)(void* user) = nullptr;
 };
 
-class VulkanVideoOutAdapter final : public FrontendAdapter {
+class VulkanVideoOutAdapter final : public FrontendAdapter,
+                                    public khdays::ps5::world::Renderer {
 public:
     explicit VulkanVideoOutAdapter(VulkanVideoOutHooks hooks)
         : hooks_(hooks) {}
@@ -30,6 +34,7 @@ public:
     bool initialize(int width, int height) override;
     khdays::ps5::frontend::Input poll_input() override;
     void draw(const khdays::ps5::frontend::Frame& frame) override;
+    void draw_world(const khdays::ps5::world::WorldFrame& frame) override;
     void present() override;
     void wait_for_next_frame(std::int64_t duration_ns) override;
     void shutdown() override;

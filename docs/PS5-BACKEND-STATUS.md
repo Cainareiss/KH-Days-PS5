@@ -10,7 +10,8 @@ portátil para um título executável:
    (que por sua vez chamam `sceAudioOutInit/Open/Output/Close`).
 3. `VulkanVideoOutAdapter` recebe callbacks do executável PS5 para o
    swapchain Vulkan/VideoOut, input, gravação de comandos, present e espera do
-   frame.
+   frame. A mesma ponte agora recebe `WorldFrame`, incluindo gameplay, HUD,
+   inimigos, cutscene e a lista de assets do primeiro mundo.
 
 O núcleo foi compilado no host e no alvo Prospero como
 `build-ps5-core/libkhdays-ps5-core.a`. O host não simula um dispositivo PS5:

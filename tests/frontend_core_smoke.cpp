@@ -1,5 +1,6 @@
 #include "khdays_ps5/frontend_core.h"
 #include "khdays_ps5/gameplay_core.h"
+#include "khdays_ps5/world_runtime.h"
 #include "platform/ps5/frontend_session.h"
 
 #include <cassert>
@@ -60,6 +61,16 @@ public:
     int presents = 0;
     std::int64_t last_wait_ns = 0;
     Frame last{};
+};
+
+class TestWorldRenderer final : public khdays::ps5::world::Renderer {
+public:
+    void draw_world(const khdays::ps5::world::WorldFrame& value) override {
+        last = value;
+        ++draws;
+    }
+    khdays::ps5::world::WorldFrame last{};
+    int draws = 0;
 };
 
 int main() {
@@ -123,5 +134,33 @@ int main() {
     khdays::ps5::gameplay::SaveData restored;
     assert(khdays::ps5::gameplay::decode_save(encoded, restored));
     assert(restored.mission.id == 42);
+
+    khdays::ps5::world::FirstWorldRuntime world;
+    TestWorldRenderer world_renderer;
+    world.start();
+    world.render(world_renderer);
+    assert(world_renderer.last.world_name == "Twilight Town");
+    assert(world_renderer.last.cutscene_active);
+    world.tick(khdays::ps5::world::Command::SkipCutscene);
+    for (int move = 0; move < 8; ++move) {
+        world.tick(khdays::ps5::world::Command::MoveRight);
+    }
+    for (int hit = 0; hit < 3; ++hit) {
+        world.tick(khdays::ps5::world::Command::Attack);
+    }
+    for (int move = 0; move < 12; ++move) {
+        world.tick(khdays::ps5::world::Command::MoveRight);
+    }
+    for (int hit = 0; hit < 3; ++hit) {
+        world.tick(khdays::ps5::world::Command::Attack);
+    }
+    for (int move = 0; move < 12; ++move) {
+        world.tick(khdays::ps5::world::Command::MoveRight);
+    }
+    for (int hit = 0; hit < 3; ++hit) {
+        world.tick(khdays::ps5::world::Command::Attack);
+    }
+    assert(world.finished());
+    assert(world_renderer.draws == 1);
     return 0;
 }

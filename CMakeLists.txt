@@ -10,11 +10,13 @@ option(KHDAYS_PS5_BUILD_RUNTIME
 add_library(khdays-ps5-core STATIC
     core/src/frontend_core.cpp
     core/src/gameplay_core.cpp
+    core/src/world_runtime.cpp
     platform/ps5/audio_output.cpp
     platform/ps5/file_resource_provider.cpp
     platform/ps5/frontend_session.cpp
     platform/ps5/save_store.cpp
     platform/ps5/vulkan_videoout_adapter.cpp
+    platform/ps5/world_session.cpp
 )
 target_compile_features(khdays-ps5-core PUBLIC cxx_std_20)
 target_include_directories(khdays-ps5-core PUBLIC core/include ${CMAKE_CURRENT_SOURCE_DIR})
