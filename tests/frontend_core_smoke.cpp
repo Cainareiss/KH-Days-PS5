@@ -1,4 +1,5 @@
 #include "khdays_ps5/frontend_core.h"
+#include "platform/ps5/frontend_session.h"
 
 #include <cassert>
 #include <string>
@@ -22,6 +23,26 @@ public:
     void draw(const Frame& frame) override { last = frame; ++draws; }
     Frame last{};
     int draws = 0;
+};
+
+class TestAdapter final : public khdays::platform::ps5::FrontendAdapter {
+public:
+    bool initialize(const int, const int) override { initialized = true; return true; }
+    Input poll_input() override {
+        return frame_count++ == 0 ? Input::one(Button::Start) : Input{};
+    }
+    void draw(const Frame& frame) override { last = frame; ++draws; }
+    void present() override { ++presents; }
+    void wait_for_next_frame(const std::int64_t ns) override { last_wait_ns = ns; }
+    void shutdown() override { shutdown_called = true; }
+
+    bool initialized = false;
+    bool shutdown_called = false;
+    int frame_count = 0;
+    int draws = 0;
+    int presents = 0;
+    std::int64_t last_wait_ns = 0;
+    Frame last{};
 };
 
 int main() {
@@ -51,5 +72,18 @@ int main() {
     core.tick(Input::one(Button::Confirm));
     assert(core.scene() == SceneId::Gameplay);
     assert(renderer.draws == 1);
+
+    Config session_config;
+    session_config.boot_pair_frames = 1;
+    TestAdapter adapter;
+    khdays::platform::ps5::FrontendSession session(adapter, session_config,
+                                                   resources);
+    assert(session.start(&error));
+    assert(session.frame());
+    assert(adapter.initialized && adapter.presents == 1);
+    assert(adapter.last.scene == SceneId::Title);
+    assert(adapter.last_wait_ns > 0);
+    session.shutdown();
+    assert(adapter.shutdown_called);
     return 0;
 }

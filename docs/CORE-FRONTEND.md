@@ -11,6 +11,8 @@ SDL e das APIs do PS5:
 - atalho por START/Confirm e navegação Up/Down/Cancel;
 - validação de recursos obrigatórios antes de entrar em cada cena;
 - interfaces `ResourceProvider` e `Renderer` para o backend PC ou PS5.
+- `FrontendSession`, que conecta input, render, apresentação e clock ao
+  `FrontendAdapter` sem vazar APIs do SDK para o núcleo.
 
 ## Validação local
 
