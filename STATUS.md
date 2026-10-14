@@ -52,3 +52,10 @@ Nenhum ELF, FSELF, PKG ou executável PS5 é produzido por este repositório no
 estado atual. Qualquer arquivo futuro desse tipo será gerado localmente para
 testes do proprietário do console, não versionado aqui.
 
+## Marco de dados completo
+
+- A árvore NitroFS inteira foi staged localmente em `build-full-game-data/data/`.
+- O manifesto contém 1.713 arquivos com tamanho e SHA-256.
+- Essa etapa não gera exFAT nem altera a saída de empacotamento.
+- O runtime ainda é uma fatia vertical: decodificadores P2/CAKP/Z, NFTR,
+  NSBMD/NSBTX, SDAT e MODS e a integração de todos os mundos continuam pendentes.
