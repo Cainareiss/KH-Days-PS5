@@ -21,6 +21,7 @@
 - fontes públicas da toolchain baixadas localmente; estado registrado em `docs/TOOLCHAIN-STATUS.md`.
 - núcleo portátil e fluxo de front-end PC/PS5 implementados em `core/`, com smoke test CMake passando.
 - loop `FrontendSession` integrado ao adaptador PS5 e compilado também como biblioteca estática com `prospero.cmake`.
+- saída 4K configurada no contrato (`3840x2160`) com viewport 4:3 e escala inteira do framebuffer original.
 
 ## Ainda pendente
 

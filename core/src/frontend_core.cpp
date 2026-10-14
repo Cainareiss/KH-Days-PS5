@@ -29,6 +29,48 @@ Input Input::one(const Button button) noexcept {
     return Input{bit(button)};
 }
 
+Viewport compute_viewport(const std::uint32_t virtual_width,
+                          const std::uint32_t virtual_height,
+                          const std::uint32_t output_width,
+                          const std::uint32_t output_height,
+                          const bool integer_nearest) noexcept {
+    if (virtual_width == 0 || virtual_height == 0 || output_width == 0
+        || output_height == 0) {
+        return {};
+    }
+
+    std::uint32_t scale = 1;
+    std::uint32_t width = virtual_width;
+    std::uint32_t height = virtual_height;
+    if (integer_nearest) {
+        scale = std::min(output_width / virtual_width,
+                         output_height / virtual_height);
+        scale = std::max<std::uint32_t>(scale, 1);
+        width = virtual_width * scale;
+        height = virtual_height * scale;
+    } else {
+        // Fit the 4:3 frame without distortion when filtering is requested.
+        width = output_width;
+        height = static_cast<std::uint32_t>(
+            (static_cast<std::uint64_t>(width) * virtual_height)
+            / virtual_width);
+        if (height > output_height) {
+            height = output_height;
+            width = static_cast<std::uint32_t>(
+                (static_cast<std::uint64_t>(height) * virtual_width)
+                / virtual_height);
+        }
+        scale = 1;
+    }
+    return Viewport{
+        (output_width - width) / 2,
+        (output_height - height) / 2,
+        width,
+        height,
+        scale,
+    };
+}
+
 Core::Core(Config config, const ResourceProvider& resources)
     : config_(std::move(config)), resources_(resources) {}
 
@@ -220,6 +262,11 @@ void Core::render(Renderer& renderer) const {
     frame.selection = selection_;
     frame.virtual_width = config_.virtual_width;
     frame.virtual_height = config_.virtual_height;
+    frame.output_width = config_.output_width;
+    frame.output_height = config_.output_height;
+    frame.viewport = compute_viewport(
+        config_.virtual_width, config_.virtual_height, config_.output_width,
+        config_.output_height, config_.integer_nearest);
     frame.resources = scene_resources();
     renderer.draw(frame);
 }

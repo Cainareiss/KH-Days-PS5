@@ -42,11 +42,30 @@ struct Config final {
     std::string language = "en";
     std::uint32_t virtual_width = 256;
     std::uint32_t virtual_height = 192;
+    // PS5 output target. The renderer still receives the original DS-sized
+    // framebuffer and places it inside this 4:3 viewport.
+    std::uint32_t output_width = 3840;
+    std::uint32_t output_height = 2160;
+    bool integer_nearest = true;
     double refresh_hz = 59.8261;
     std::uint32_t boot_pair_frames = 91;
     std::uint32_t title_intro_frames = 0;
     std::uint32_t opening_frames = 18'000;
 };
+
+struct Viewport final {
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+    std::uint32_t width = 256;
+    std::uint32_t height = 192;
+    std::uint32_t integer_scale = 1;
+};
+
+[[nodiscard]] Viewport compute_viewport(std::uint32_t virtual_width,
+                                        std::uint32_t virtual_height,
+                                        std::uint32_t output_width,
+                                        std::uint32_t output_height,
+                                        bool integer_nearest) noexcept;
 
 struct ResourceRef final {
     std::string path;
@@ -66,6 +85,9 @@ struct Frame final {
     int selection = 0;
     std::uint32_t virtual_width = 256;
     std::uint32_t virtual_height = 192;
+    std::uint32_t output_width = 3840;
+    std::uint32_t output_height = 2160;
+    Viewport viewport{};
     std::vector<ResourceRef> resources;
 };
 

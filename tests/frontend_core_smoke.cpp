@@ -57,6 +57,13 @@ int main() {
     core.render(renderer);
     assert(renderer.last.scene == SceneId::BootLogo);
     assert(renderer.last.resources.size() == 1);
+    assert(renderer.last.output_width == 3840);
+    assert(renderer.last.output_height == 2160);
+    assert(renderer.last.viewport.x == 512);
+    assert(renderer.last.viewport.y == 24);
+    assert(renderer.last.viewport.width == 2816);
+    assert(renderer.last.viewport.height == 2112);
+    assert(renderer.last.viewport.integer_scale == 11);
 
     core.tick(Input::one(Button::Start));
     assert(core.scene() == SceneId::Title);

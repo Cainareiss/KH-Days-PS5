@@ -14,6 +14,14 @@ SDL e das APIs do PS5:
 - `FrontendSession`, que conecta input, render, apresentação e clock ao
   `FrontendAdapter` sem vazar APIs do SDK para o núcleo.
 
+## Saída 4K
+
+O padrão do núcleo agora solicita saída `3840x2160` ao adaptador. O conteúdo
+continua sendo renderizado no framebuffer virtual `256x192`, com escala inteira
+`11x` e viewport `2816x2112` centralizado (barras laterais e superior/inferior
+para preservar a proporção 4:3). O backend Vulkan poderá trocar para filtragem
+linear, mas não deve esticar a imagem nem alterar a resolução virtual do jogo.
+
 ## Validação local
 
 ```powershell

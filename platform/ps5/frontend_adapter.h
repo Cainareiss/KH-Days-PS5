@@ -14,7 +14,8 @@ class FrontendAdapter : public khdays::ps5::frontend::Renderer {
 public:
     virtual ~FrontendAdapter() = default;
 
-    // Create VideoOut/display and the renderer-owned presentation resources.
+    // Create VideoOut/display at the configured output resolution. The
+    // renderer presents the virtual 256x192 frame inside Frame::viewport.
     virtual bool initialize(int width, int height) = 0;
 
     // Return one frame of input mapped to the game's device-neutral buttons.
