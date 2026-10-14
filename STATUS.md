@@ -15,6 +15,8 @@
 - extração local validada para a revisão USA `YKGE` em inglês e francês;
 - descompressão de 958 arquivos e desempacotamento de 486 entradas de UI sem falhas.
 - smoke test documentado em `docs/FRONTEND-SMOKE-REPORT.md`.
+- baseline PC compilada com Visual Studio/CMake; logos, título, seleção de personagem e salvamento renderizados com os assets reais da revisão USA.
+- detalhes e limites registrados em `docs/PC-FRONTEND-BASELINE.md`.
 
 ## Ainda pendente
 
