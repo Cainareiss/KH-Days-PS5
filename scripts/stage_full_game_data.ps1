@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$SourceRoot = "E:\DOCUMENTOS\KH-ReCoded-PTBR\tools\khdays-port\data\extracted\3cbbe3f15b49fc26\nitrofs",
+    [string]$SystemRoot = "E:\DOCUMENTOS\KH-ReCoded-PTBR\tools\khdays-port\data\extracted\3cbbe3f15b49fc26\system",
     [string]$DestinationRoot = "..\build-full-game-data\data",
     [switch]$CleanDestination
 )
@@ -8,10 +9,14 @@ param(
 $ErrorActionPreference = "Stop"
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $source = [System.IO.Path]::GetFullPath($SourceRoot)
+$systemSource = [System.IO.Path]::GetFullPath($SystemRoot)
 $destination = [System.IO.Path]::GetFullPath((Join-Path $scriptRoot $DestinationRoot))
 
 if (-not (Test-Path -LiteralPath $source -PathType Container)) {
     throw "Árvore NitroFS não encontrada: $source"
+}
+if (-not (Test-Path -LiteralPath $systemSource -PathType Container)) {
+    throw "Diretório system não encontrado: $systemSource"
 }
 if ($CleanDestination -and (Test-Path -LiteralPath $destination)) {
     Remove-Item -LiteralPath $destination -Recurse -Force
@@ -19,7 +24,8 @@ if ($CleanDestination -and (Test-Path -LiteralPath $destination)) {
 New-Item -ItemType Directory -Force -Path $destination | Out-Null
 
 $files = Get-ChildItem -LiteralPath $source -Recurse -File
-$records = foreach ($file in $files) {
+$records = @($files | ForEach-Object {
+    $file = $_
     $relative = $file.FullName.Substring($source.Length).TrimStart('\', '/')
     $target = Join-Path $destination $relative
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
@@ -31,11 +37,28 @@ $records = foreach ($file in $files) {
         sha256 = $hash
         extension = if ([string]::IsNullOrEmpty($file.Extension)) { "<none>" } else { $file.Extension.ToLowerInvariant() }
     }
-}
+})
+
+$systemRecords = @(Get-ChildItem -LiteralPath $systemSource -Recurse -File |
+    ForEach-Object {
+        $file = $_
+        $relative = $file.FullName.Substring($systemSource.Length).TrimStart('\', '/')
+        $manifestPath = "system/$(($relative -replace '\\', '/'))"
+        $target = Join-Path (Join-Path $destination "system") $relative
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
+        Copy-Item -LiteralPath $file.FullName -Destination $target -Force
+        [pscustomobject]@{
+            path = $manifestPath
+            bytes = $file.Length
+            sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            extension = if ([string]::IsNullOrEmpty($file.Extension)) { "<none>" } else { $file.Extension.ToLowerInvariant() }
+        }
+    })
+$records = @($records) + @($systemRecords)
 
 $requiredRoots = @(
     "ba", "db", "ev", "gameover", "mi", "mo", "mrslt", "Ms", "mv",
-    "op", "pause", "snd", "text", "ttl", "UI"
+    "op", "pause", "snd", "system", "text", "ttl", "UI"
 )
 $rootReport = foreach ($root in $requiredRoots) {
     $matches = @($records | Where-Object { $_.path -eq $root -or $_.path.StartsWith("$root/") })

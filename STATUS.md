@@ -1,69 +1,40 @@
 # Status do projeto
 
-**WIP — adaptação em andamento; ainda não é uma build jogável para PS5.**
+**WIP — adaptação em andamento; ainda não é uma build jogável completa para
+PS5.**
 
-## Concluído neste marco
+## Concluído
 
-- repositório local separado para o alvo PS5;
-- mapa do front-end e das transições de cena;
-- contrato agnóstico `FrontendAdapter` para vídeo, input, apresentação e clock;
-- mapeamento inicial do DualSense para os botões neutros do jogo;
-- lista de recursos necessários para logos, título, menus, save e seleção;
-- regras para não versionar ROM, assets extraídos, SDK ou binários;
-- diagnóstico do host e da ausência da toolchain PS5.
-- manifesto dos recursos do front-end e verificador por idioma.
-- extração local validada para a revisão USA `YKGE` em inglês e francês;
-- descompressão de 958 arquivos e desempacotamento de 486 entradas de UI sem falhas.
-- smoke test documentado em `docs/FRONTEND-SMOKE-REPORT.md`.
-- baseline PC compilada com Visual Studio/CMake; logos, título, seleção de personagem e salvamento renderizados com os assets reais da revisão USA.
-- detalhes e limites registrados em `docs/PC-FRONTEND-BASELINE.md`.
-- auditoria da fronteira SDL/port neutro registrada em `docs/PC-PS5-API-AUDIT.md`.
-- fontes públicas da toolchain baixadas localmente; estado registrado em `docs/TOOLCHAIN-STATUS.md`.
-- núcleo portátil e fluxo de front-end PC/PS5 implementados em `core/`, com smoke test CMake passando.
-- loop `FrontendSession` integrado ao adaptador PS5 e compilado também como biblioteca estática com `prospero.cmake`.
-- saída 4K configurada no contrato (`3840x2160`) com viewport 4:3 e escala inteira do framebuffer original.
+- núcleo portátil de front-end, gameplay, combate, HUD, missão e save;
+- configuração lógica 4K (`3840x2160`) com viewport 4:3;
+- toolchain pública PS5 Payload SDK v0.44 e LLVM/Prospero instalada localmente;
+- compilação cruzada do núcleo e das bibliotecas de mídia para Prospero;
+- árvore local do jogo staged com 1.718 arquivos e hashes, sem versionar ROM ou
+  dados proprietários;
+- catálogo de 114 missões e 10 mundos;
+- decodificação P2/LZ, CAKP/KAPH, NFTR, NSBMD/TEX0, SDAT e MODS/MobiClip;
+- conversão das texturas para RGBA e das malhas para buffers neutros;
+- backend real de recursos Vulkan com `VkImage`, sampler, buffers device-local,
+  atualização da textura MODS e quad de vídeo;
+- conversão/reamostragem para PCM16 estéreo a 48 kHz e ligação ao
+  `audio_start()` nativo, cuja implementação do template usa `sceAudioOut`;
+- agendamento de frames MODS pelo FPS do contêiner;
+- smoke test com assets reais aprovado: 12 texturas, 13 malhas, dois frames de
+  vídeo e áudio não silencioso;
+- build Prospero de `khdays-ps5-native-media-runtime` aprovado.
 
-## Backend de plataforma implementado neste marco
-
-- `FileResourceProvider` lê assets reais da raiz `/app0` com proteção contra
-  traversal de caminhos;
-- `TemplatePs5AudioOutput` segue o contrato PCM do template (`sceAudioOut`)
-  quando `KHDAYS_PS5_NATIVE_BACKEND` for ativado;
-- `VulkanVideoOutAdapter` fornece a ponte de inicialização, desenho, present e
-  sincronização para o swapchain Vulkan/VideoOut real;
-- o núcleo entrega bytes brutos em `Frame::assets` e a sessão inicializa o
-  adaptador em `3840x2160`.
-
-## Runtime e gameplay neste marco
-
-- fatia de gameplay com combate, HUD, missão e save versionado em `core/`;
-- alvo Prospero `khdays-days-runtime.elf` gerado como ELF executável;
-- FSELF fake/homebrew e bundle ZIP reproduzíveis por `scripts/package_ps5_homebrew.ps1`.
+Os detalhes e comandos reproduzíveis estão em
+[`docs/RUNTIME-MEDIA-PIPELINE.md`](docs/RUNTIME-MEDIA-PIPELINE.md).
 
 ## Ainda pendente
 
-- instalar e fixar `ps5-payload-dev/sdk` e o compilador Prospero;
-- implementar VideoOut/swapchain Vulkan e o primeiro “Hello Vulkan”;
-- implementar input e áudio PS5;
-- ligar as cenas reais ao adaptador e testar no console homebrew;
-- corrigir limitações atuais do `khdays-port` (gameplay, saves e multiplayer).
+- criar no `VulkanExample` final os pipelines e descriptor sets de malha/vídeo
+  e gravar os draws no command buffer do swapchain;
+- ligar o catálogo, scripts e transições ao loop completo de todas as missões;
+- integrar fontes, HUD e todas as telas 2D ao renderer final;
+- testar Vulkan/VideoOut, DualSense e `sceAudioOut` no PS5 homebrew real;
+- somente após o teste no console, reconstruir uma distribuição exFAT válida.
 
-Nenhum ELF, FSELF, PKG ou executável PS5 é produzido por este repositório no
-estado atual. Qualquer arquivo futuro desse tipo será gerado localmente para
-testes do proprietário do console, não versionado aqui.
-
-## Marco de dados completo
-
-- A árvore NitroFS inteira foi staged localmente em `build-full-game-data/data/`.
-- O manifesto contém 1.713 arquivos com tamanho e SHA-256.
-- Essa etapa não gera exFAT nem altera a saída de empacotamento.
-- O runtime ainda é uma fatia vertical: decodificadores P2/CAKP/Z, NFTR,
-  NSBMD/NSBTX, SDAT e MODS e a integração de todos os mundos continuam pendentes.
-
-## Ponte de decodificadores
-
-- biblioteca opcional `khdays-pc-asset-decoders` integrada ao CMake;
-- `AssetDecodeBridge` valida P2/LZ, CAKP/KAPH, 2D, NSBMD/TEX0, NFTR, SDAT e MODS;
-- smoke test aprovado com assets reais em `build-asset-bridge-vs`;
-- catálogo gerado para 114 missões e 10 mundos;
-- upload Vulkan, mixer PS5 e reprodução efetiva de vídeo ainda não estão concluídos.
+As bibliotecas terem compilado para Prospero comprova compatibilidade de
+compilação, não funcionamento no console. Nenhum resultado de hardware é
+declarado sem teste real.

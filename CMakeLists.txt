@@ -8,8 +8,12 @@ option(KHDAYS_PS5_BUILD_RUNTIME
        "Build the Prospero ELF gameplay/runtime smoke target" OFF)
 option(KHDAYS_ENABLE_PC_ASSET_DECODERS
        "Build the neutral decoders from the local PC port" OFF)
+option(KHDAYS_PS5_BUILD_VULKAN_MEDIA_BACKEND
+       "Build the concrete PS5 Vulkan media resource backend" OFF)
 set(KHDAYS_PC_PORT_ROOT "" CACHE PATH
     "Root of the KH 358/2 Days PC port containing include/ and src/assets/")
+set(KHDAYS_PS5_VULKAN_TEMPLATE_ROOT "" CACHE PATH
+    "Root of PS5_VulkanTemplate containing base/, external/ and ps5/")
 
 add_library(khdays-ps5-core STATIC
     core/src/frontend_core.cpp
@@ -26,6 +30,29 @@ target_compile_features(khdays-ps5-core PUBLIC cxx_std_20)
 target_include_directories(khdays-ps5-core PUBLIC core/include ${CMAKE_CURRENT_SOURCE_DIR})
 if(KHDAYS_PS5_NATIVE_BACKEND)
     target_compile_definitions(khdays-ps5-core PUBLIC KHDAYS_PS5_NATIVE_BACKEND=1)
+endif()
+
+if(KHDAYS_PS5_BUILD_VULKAN_MEDIA_BACKEND)
+    if(NOT KHDAYS_PS5_VULKAN_TEMPLATE_ROOT OR
+       NOT EXISTS "${KHDAYS_PS5_VULKAN_TEMPLATE_ROOT}/base/VulkanDevice.h" OR
+       NOT EXISTS "${KHDAYS_PS5_VULKAN_TEMPLATE_ROOT}/ps5/third_party/volk/volk.h")
+        message(FATAL_ERROR
+            "KHDAYS_PS5_VULKAN_TEMPLATE_ROOT must point to PS5_VulkanTemplate")
+    endif()
+    add_library(khdays-ps5-vulkan-media-backend STATIC
+        platform/ps5/vulkan_media_backend.cpp)
+    target_compile_features(khdays-ps5-vulkan-media-backend PUBLIC cxx_std_20)
+    target_compile_definitions(khdays-ps5-vulkan-media-backend PUBLIC
+        VK_NO_PROTOTYPES=1)
+    target_include_directories(khdays-ps5-vulkan-media-backend PUBLIC
+        platform/ps5
+        "${KHDAYS_PS5_VULKAN_TEMPLATE_ROOT}/base"
+        "${KHDAYS_PS5_VULKAN_TEMPLATE_ROOT}/external"
+        "${KHDAYS_PS5_VULKAN_TEMPLATE_ROOT}/external/ktx/include"
+        "${KHDAYS_PS5_VULKAN_TEMPLATE_ROOT}/external/ktx/other_include"
+        "${KHDAYS_PS5_VULKAN_TEMPLATE_ROOT}/ps5/third_party/volk")
+    # The final title supplies VulkanTexture.cpp/VulkanDevice.cpp and the volk
+    # function pointers through PS5_VulkanTemplate's samples target.
 endif()
 
 if(KHDAYS_ENABLE_PC_ASSET_DECODERS)
@@ -63,13 +90,27 @@ if(KHDAYS_ENABLE_PC_ASSET_DECODERS)
         "${KHDAYS_PC_PORT_ROOT}/external/khdays-decomp/libs/mobiclip/video/portable")
 
     add_library(khdays-ps5-asset-bridge STATIC
-        platform/ps5/asset_decode_bridge.cpp)
+        platform/ps5/asset_decode_bridge.cpp
+        platform/ps5/runtime_media_pipeline.cpp)
     target_compile_features(khdays-ps5-asset-bridge PUBLIC cxx_std_20)
     target_include_directories(khdays-ps5-asset-bridge PUBLIC platform/ps5)
     target_link_libraries(khdays-ps5-asset-bridge PUBLIC khdays-pc-asset-decoders)
 
     add_executable(khdays-ps5-asset-smoke platform/ps5/asset_decode_smoke.cpp)
     target_link_libraries(khdays-ps5-asset-smoke PRIVATE khdays-ps5-asset-bridge)
+
+    add_executable(khdays-ps5-media-smoke platform/ps5/runtime_media_smoke.cpp)
+    target_link_libraries(khdays-ps5-media-smoke PRIVATE khdays-ps5-asset-bridge)
+
+    if(KHDAYS_PS5_BUILD_VULKAN_MEDIA_BACKEND)
+        add_library(khdays-ps5-native-media-runtime STATIC
+            platform/ps5/native_media_runtime.cpp)
+        target_compile_features(khdays-ps5-native-media-runtime PUBLIC cxx_std_20)
+        target_link_libraries(khdays-ps5-native-media-runtime PUBLIC
+            khdays-ps5-core
+            khdays-ps5-asset-bridge
+            khdays-ps5-vulkan-media-backend)
+    endif()
 endif()
 
 if(KHDAYS_PS5_BUILD_RUNTIME)

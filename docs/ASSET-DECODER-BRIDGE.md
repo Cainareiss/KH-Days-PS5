@@ -33,6 +33,8 @@ O smoke test atual valida, com os arquivos reais, mensagens P2, NFTR, SDAT,
 MODS, KAPH/NSBMD, NCLR e NCGR. O catálogo gerado por
 `build_mission_catalog.ps1` registra as 114 missões e 10 mundos disponíveis.
 
-Esta ponte é a camada de decodificação; ainda é necessário conectar os objetos
-neutros ao upload de texturas, buffers de malha, mixer de áudio e apresentação
-de vídeo do backend Vulkan/VideoOut antes de chamar o jogo de jogável completo.
+Essa ponte agora alimenta `RuntimeMediaPipeline`, `VulkanMediaBackend` e
+`NativeMediaRuntime`. A integração de upload Vulkan, saída nativa de áudio e
+frames MODS está descrita em `RUNTIME-MEDIA-PIPELINE.md`. O jogo ainda não é uma
+build completa: faltam os pipelines do título final, a ligação de todas as
+missões e a validação no console.

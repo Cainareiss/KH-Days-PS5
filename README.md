@@ -53,13 +53,14 @@ direta para VideoOut, controles, áudio e Vulkan.
 
 ## Bloqueios atuais
 
-- Não há `prospero-clang`, PS5 Payload SDK ou stack `PS5_Vulkan` instalada no
-  shell Windows atual.
-- Não foi fornecido um endpoint de teste/console PS5 já preparado para
-  homebrew. Sem ele não é possível afirmar que um ELF ou PKG funciona no
-  console.
-- O port de origem não é ainda um jogo completo; portar a janela não cria as
-  missões e o combate que ainda faltam.
+- A toolchain pública, o PS5 Payload SDK e o PS5 Vulkan Template já estão
+  instalados localmente, e as bibliotecas de mídia compilam para Prospero.
+- O `VulkanExample` final ainda precisa ligar pipelines/descriptors e os draws
+  do backend de mídia ao command buffer do swapchain.
+- Não há execução automatizada neste workspace contra um PS5 homebrew. Sem o
+  teste no console não é possível afirmar que Vulkan/VideoOut ou `sceAudioOut`
+  funcionam no hardware.
+- O port de origem ainda não implementa o fluxo completo de todas as missões.
 
 ## Referências públicas
 

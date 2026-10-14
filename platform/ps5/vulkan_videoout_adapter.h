@@ -2,6 +2,7 @@
 
 #include "frontend_adapter.h"
 #include "khdays_ps5/world_runtime.h"
+#include "runtime_media_pipeline.h"
 
 #include <cstdint>
 
@@ -20,6 +21,19 @@ struct VulkanVideoOutHooks final {
                        const khdays::ps5::frontend::Frame& frame) = nullptr;
     bool (*draw_world)(void* user,
                        const khdays::ps5::world::WorldFrame& frame) = nullptr;
+    bool (*upload_texture)(void* user, const char* key, std::uint32_t width,
+                           std::uint32_t height, const std::uint8_t* rgba,
+                           std::size_t rgba_bytes) = nullptr;
+    bool (*upload_mesh)(void* user, const char* key,
+                        const RuntimeGpuVertex* vertices,
+                        std::size_t vertex_count,
+                        const std::uint32_t* indices,
+                        std::size_t index_count,
+                        const char* texture_key) = nullptr;
+    bool (*present_video_frame)(void* user, std::uint64_t frame_index,
+                                std::uint32_t width, std::uint32_t height,
+                                const std::uint8_t* rgba,
+                                std::size_t rgba_bytes) = nullptr;
     bool (*present)(void* user) = nullptr;
     void (*wait_for_next_frame)(void* user, std::int64_t duration_ns) = nullptr;
     void (*shutdown)(void* user) = nullptr;
@@ -42,6 +56,14 @@ public:
     [[nodiscard]] bool initialized() const noexcept { return initialized_; }
     [[nodiscard]] bool frame_ok() const noexcept { return frame_ok_; }
     [[nodiscard]] const char* last_error() const noexcept { return last_error_; }
+    [[nodiscard]] RuntimeMediaHooks media_hooks() const noexcept {
+        return RuntimeMediaHooks{
+            hooks_.user,
+            hooks_.upload_texture,
+            hooks_.upload_mesh,
+            hooks_.present_video_frame,
+        };
+    }
 
 private:
     void fail(const char* message) noexcept { last_error_ = message; }
