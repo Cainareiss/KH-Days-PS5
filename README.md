@@ -6,6 +6,9 @@
 Consulte [`STATUS.md`](STATUS.md) para o que já foi concluído e o que continua
 pendente.
 
+O procedimento para usar dados locais sem publicá-los está em
+[`docs/LOCAL-DATA-WORKFLOW.md`](docs/LOCAL-DATA-WORKFLOW.md).
+
 Este diretório é o espaço de trabalho para investigar uma compilação do
 `khdays-port` (Kingdom Hearts 358/2 Days) como título homebrew para PS5. O
 nome “374 Days” foi tratado como referência a **358/2 Days**.

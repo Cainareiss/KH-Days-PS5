@@ -12,6 +12,8 @@
 - regras para não versionar ROM, assets extraídos, SDK ou binários;
 - diagnóstico do host e da ausência da toolchain PS5.
 - manifesto dos recursos do front-end e verificador por idioma.
+- extração local validada para a revisão USA `YKGE` em inglês e francês;
+- descompressão de 958 arquivos e desempacotamento de 486 entradas de UI sem falhas.
 
 ## Ainda pendente
 
