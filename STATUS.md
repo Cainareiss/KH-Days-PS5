@@ -14,6 +14,7 @@
 - manifesto dos recursos do front-end e verificador por idioma.
 - extração local validada para a revisão USA `YKGE` em inglês e francês;
 - descompressão de 958 arquivos e desempacotamento de 486 entradas de UI sem falhas.
+- smoke test documentado em `docs/FRONTEND-SMOKE-REPORT.md`.
 
 ## Ainda pendente
 
