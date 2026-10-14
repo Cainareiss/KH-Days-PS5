@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$BundleRoot = "..\build-ps5-app\PPSA99360",
-    [string]$OutputRoot = "..\build-ps5-exfat",
+    [string]$OutputRoot = "..\build-ps5-exfat\PPSA99360",
     [string]$UsbRoot = "",
     [string]$AssetRoot = "E:\DOCUMENTOS\KH-ReCoded-PTBR\tools\khdays-port\data\extracted\3cbbe3f15b49fc26\nitrofs"
 )
