@@ -19,6 +19,7 @@
 - detalhes e limites registrados em `docs/PC-FRONTEND-BASELINE.md`.
 - auditoria da fronteira SDL/port neutro registrada em `docs/PC-PS5-API-AUDIT.md`.
 - fontes públicas da toolchain baixadas localmente; estado registrado em `docs/TOOLCHAIN-STATUS.md`.
+- núcleo portátil e fluxo de front-end PC/PS5 implementados em `core/`, com smoke test CMake passando.
 
 ## Ainda pendente
 
