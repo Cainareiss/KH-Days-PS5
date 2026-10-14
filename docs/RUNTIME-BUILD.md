@@ -28,7 +28,7 @@ save. Ele ainda não é o jogo completo nem instancia o renderer Vulkan.
 ./scripts/package_ps5_homebrew.ps1
 ```
 
-O script usa o `make_fself.py` público do SDK e cria `eboot.bin`, `sce_sys` e
+O script usa o `make_fself.py` público do SDK e cria `PPSA99360/eboot.bin`, `sce_sys` e
 um ZIP de instalação/teste. O resultado é fake-signed para homebrew/debug.
 
 Um PKG retail válido exige ferramentas e assinatura da cadeia oficial da

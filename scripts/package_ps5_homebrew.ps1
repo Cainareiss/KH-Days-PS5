@@ -3,7 +3,7 @@ param(
     [string]$Elf = "..\build-ps5-runtime\khdays-days-runtime.elf",
     [string]$SdkRoot = "..\toolchains\ps5-payload-sdk-v0.44\ps5-payload-sdk",
     [string]$OutputRoot = "..\build-ps5-app",
-    [string]$TitleId = "KHDY00001"
+    [string]$TitleId = "PPSA99360"
 )
 
 $ErrorActionPreference = "Stop"
