@@ -1,4 +1,5 @@
 #include "khdays_ps5/frontend_core.h"
+#include "khdays_ps5/gameplay_core.h"
 #include "platform/ps5/frontend_session.h"
 
 #include <cassert>
@@ -112,5 +113,15 @@ int main() {
     assert(adapter.last_wait_ns > 0);
     session.shutdown();
     assert(adapter.shutdown_called);
+
+    khdays::ps5::gameplay::GameplayCore gameplay;
+    gameplay.start_mission(42, 1);
+    gameplay.begin_encounter(10);
+    gameplay.tick(khdays::ps5::gameplay::Command::Attack);
+    assert(gameplay.hud().mission.complete);
+    const auto encoded = khdays::ps5::gameplay::encode_save(gameplay.save());
+    khdays::ps5::gameplay::SaveData restored;
+    assert(khdays::ps5::gameplay::decode_save(encoded, restored));
+    assert(restored.mission.id == 42);
     return 0;
 }

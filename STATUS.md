@@ -34,6 +34,12 @@
 - o núcleo entrega bytes brutos em `Frame::assets` e a sessão inicializa o
   adaptador em `3840x2160`.
 
+## Runtime e gameplay neste marco
+
+- fatia de gameplay com combate, HUD, missão e save versionado em `core/`;
+- alvo Prospero `khdays-days-runtime.elf` gerado como ELF executável;
+- FSELF fake/homebrew e bundle ZIP reproduzíveis por `scripts/package_ps5_homebrew.ps1`.
+
 ## Ainda pendente
 
 - instalar e fixar `ps5-payload-dev/sdk` e o compilador Prospero;
