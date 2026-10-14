@@ -1,5 +1,18 @@
 # Estado da toolchain PS5
 
+## Resultado RADV/CLC (14/10/2026)
+
+LLVMSPIRVLib (Khronos `8b89e5dece5a`), SPIRV-Tools 2024.4 e glslang 15.4.0
+foram compilados; `mesa_clc.exe`, `vtn_bindgen2.exe` e
+`glslangValidator.exe` foram validados no host Windows. RADV release tambem
+foi compilado a partir da revisao Mesa `47e9eb61ee7e1112194557e1e047178562827bc6`;
+o arquivo e `.deps/native/radv-release/lib/libvulkan_radeon.ps5.a`, com
+`PROVENANCE.txt` contendo o SHA-256 e a revisao do SDK.
+
+O smoke title gera os objetos e chega ao link, mas ainda falha por simbolos
+alvo ausentes (`__emutls_get_address`, `__cpu_model` e SPIR-V Tools). Isso
+prova o driver e a geracao de shaders, nao uma build jogavel completa no PS5.
+
 ## Componentes baixados localmente
 
 - `ps5-payload-dev/sdk` release `v0.44`;

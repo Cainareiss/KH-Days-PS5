@@ -1,5 +1,16 @@
 # Status do projeto
 
+## Toolchain RADV/CLC (14/10/2026)
+
+- LLVMSPIRVLib, mesa_clc.exe, vtn_bindgen2.exe e glslangValidator 15.4.0
+  foram compilados e validados no host Windows.
+- RADV release foi compilado para PS5 em
+  `.deps/native/radv-release/lib/libvulkan_radeon.ps5.a`, com
+  `PROVENANCE.txt` registrando Mesa `47e9eb61ee7e` e SDK `b83202be...`.
+- O smoke title chega ao link, mas ainda falta resolver `__emutls_get_address`,
+  `__cpu_model` e simbolos alvo de SPIR-V Tools. ELF/FSELF/PKG e hardware
+  ainda nao estao concluidos.
+
 **WIP — adaptação em andamento; ainda não é uma build jogável completa para
 PS5.**
 
