@@ -1,0 +1,35 @@
+# Build and generated files
+build/
+out/
+dist/
+.cache/
+
+# Local SDK/toolchain installations
+toolchains/
+sdk/
+.ps5-sdk-revision
+
+# User-provided game data and extracted assets
+data/
+extracted/
+roms/
+assets/
+mods/
+*.nds
+*.3ds
+*.cia
+*.pkg
+*.pup
+*.elf
+*.fself
+*.prx
+
+# Local editor and OS files
+.vscode/
+.idea/
+*.user
+*.suo
+*.swp
+Thumbs.db
+.DS_Store
+
