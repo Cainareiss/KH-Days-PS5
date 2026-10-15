@@ -12,6 +12,8 @@
 - Dados staged conferidos: 1.720 arquivos, 259.710.067 bytes.
 - Limite atual: isto ainda é uma fatia jogável integrada, não a implementação
   completa de todas as missões, telas, transições e assets do jogo original.
+- Imagem exFAT criada e verificada em `build-vulkan-title-4/dist/PPSA12345.exfat`;
+  usa cluster de 64 KiB e mantém `eboot.bin`/`sce_sys/param.json` na raiz.
 
 ## Toolchain RADV/CLC (14/10/2026)
 
