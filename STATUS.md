@@ -7,9 +7,11 @@
 - RADV release foi compilado para PS5 em
   `.deps/native/radv-release/lib/libvulkan_radeon.ps5.a`, com
   `PROVENANCE.txt` registrando Mesa `47e9eb61ee7e` e SDK `b83202be...`.
-- O smoke title chega ao link, mas ainda falta resolver `__emutls_get_address`,
-  `__cpu_model` e simbolos alvo de SPIR-V Tools. ELF/FSELF/PKG e hardware
-  ainda nao estao concluidos.
+- O smoke title foi linkado em ELF e convertido para FSELF; o resultado atual
+  esta em `toolchains/sources/PS5_Vulkan/dist/PPSA99014/eboot.bin`.
+- A camada de emulated TLS, o caminho RADV PS5 e o layout de parametros foram
+  corrigidos sem stubs falsos; o `libc.prx` tambem foi reconstruido e validado.
+- Ainda nao ha teste de boot no console e ainda nao existe PKG de distribuicao.
 
 **WIP — adaptação em andamento; ainda não é uma build jogável completa para
 PS5.**

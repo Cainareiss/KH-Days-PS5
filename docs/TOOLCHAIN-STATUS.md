@@ -9,9 +9,10 @@ foi compilado a partir da revisao Mesa `47e9eb61ee7e1112194557e1e047178562827bc6
 o arquivo e `.deps/native/radv-release/lib/libvulkan_radeon.ps5.a`, com
 `PROVENANCE.txt` contendo o SHA-256 e a revisao do SDK.
 
-O smoke title gera os objetos e chega ao link, mas ainda falha por simbolos
-alvo ausentes (`__emutls_get_address`, `__cpu_model` e SPIR-V Tools). Isso
-prova o driver e a geracao de shaders, nao uma build jogavel completa no PS5.
+O smoke title agora gera o ELF e o FSELF com RADV. As adaptacoes especificas
+do alvo resolveram o TLS emulado, a deteccao de AVX2 e o disassembler opcional
+de SPIR-V; o layout do conversor tambem reserva corretamente os blocos de
+parametros do PS5. O resultado ainda precisa de boot e teste no hardware.
 
 ## Componentes baixados localmente
 
