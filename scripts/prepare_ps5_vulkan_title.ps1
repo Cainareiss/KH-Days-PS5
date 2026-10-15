@@ -73,12 +73,24 @@ if (-not $preludeText.Contains('#include "native_media_runtime.h"')) {
         $anchor, "$anchor`n#include `"native_media_runtime.h`"")
     Set-Content -LiteralPath $prelude -Value $preludeText -Encoding UTF8 -NoNewline
 }
+if (-not $preludeText.Contains('#include "khdays_ps5/world_runtime.h"')) {
+    $anchor = '#include "native_media_runtime.h"'
+    if (-not $preludeText.Contains($anchor)) {
+        throw "Âncora de world_runtime.h não encontrada"
+    }
+    $preludeText = $preludeText.Replace(
+        $anchor, $anchor + [Environment]::NewLine + '#include "khdays_ps5/world_runtime.h"')
+    Set-Content -LiteralPath $prelude -Value $preludeText -Encoding UTF8 -NoNewline
+}
 
 $projectUnix = $projectRoot.Replace('\', '/')
 $pcUnix = $pcPort.Replace('\', '/')
 $integration = @'
 # BEGIN KHDAYS_PS5_RUNTIME
 target_sources(samples PRIVATE
+    "@PROJECT@/platform/ps5/pathconf_compat.c"
+    "@PROJECT@/core/src/gameplay_core.cpp"
+    "@PROJECT@/core/src/world_runtime.cpp"
     "@PROJECT@/platform/ps5/audio_output.cpp"
     "@PROJECT@/platform/ps5/runtime_media_pipeline.cpp"
     "@PROJECT@/platform/ps5/vulkan_media_backend.cpp"
@@ -100,6 +112,7 @@ target_sources(samples PRIVATE
     "@PC@/external/khdays-decomp/libs/mobiclip/video/portable/mobiclip_reference.cpp")
 target_include_directories(samples PRIVATE
     "@PROJECT@/platform/ps5"
+    "@PROJECT@/core/include"
     "@PC@/include"
     "@PC@/external/khdays-decomp/libs/mobiclip/video/portable")
 target_compile_definitions(samples PRIVATE KHDAYS_PS5_NATIVE_BACKEND=1)

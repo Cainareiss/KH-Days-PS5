@@ -1,5 +1,18 @@
 # Status do projeto
 
+## Runtime PPSA12345 (14/10/2026)
+
+- O smoke test foi substituído pelo título `PPSA12345`, com Vulkan/RADV,
+  decodificadores do 358/2 Days, reprodução MODS, áudio e dados staged em
+  `build-vulkan-title-4/dist/PPSA12345`.
+- O executável agora também compila e instancia `gameplay_core` e
+  `world_runtime` no mesmo loop Vulkan, incluindo a fatia inicial de mundo,
+  cutscene, HUD de missão e comandos de ataque/pular cena.
+- `eboot.bin` foi convertido e assinado; a inspeção reportou `integrity: valid`.
+- Dados staged conferidos: 1.720 arquivos, 259.710.067 bytes.
+- Limite atual: isto ainda é uma fatia jogável integrada, não a implementação
+  completa de todas as missões, telas, transições e assets do jogo original.
+
 ## Toolchain RADV/CLC (14/10/2026)
 
 - LLVMSPIRVLib, mesa_clc.exe, vtn_bindgen2.exe e glslangValidator 15.4.0

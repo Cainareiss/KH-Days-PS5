@@ -9,6 +9,7 @@
 #include "volk.h"
 #include "vulkanexamplebase.h"
 #include "native_media_runtime.h"
+#include "khdays_ps5/world_runtime.h"
 
 class VulkanExample final : public VulkanExampleBase {
 public:
@@ -40,6 +41,8 @@ public:
     std::unique_ptr<::khdays::platform::ps5::NativeMediaRuntime> media;
     std::string media_error;
     bool show_video{true};
+    khdays::ps5::world::FirstWorldRuntime world;
+    khdays::ps5::world::Command pending_command{khdays::ps5::world::Command::None};
 
     VulkanExample() : VulkanExampleBase() {
         title = "KH Days PS5";
@@ -303,6 +306,7 @@ public:
             media_error = error.what();
             media.reset();
         }
+        world.start();
         prepared = true;
     }
 
@@ -381,14 +385,30 @@ public:
                 media_error = std::move(error);
             }
         }
+        world.tick(pending_command);
+        pending_command = khdays::ps5::world::Command::None;
         update_uniforms();
         build_command_buffer();
         VulkanExampleBase::submitFrame();
     }
 
     void OnUpdateUIOverlay(vks::UIOverlay* overlay) override {
-        if (overlay->header("KH Days media")) {
+        if (overlay->header("KH Days runtime")) {
             overlay->checkBox("Show MODS video", &show_video);
+            const auto& frame = world.frame();
+            overlay->text("World: %s  Room: %u", frame.world_name.c_str(), frame.room);
+            overlay->text("Mission: %u  Enemies: %zu", frame.hud.mission.id,
+                          frame.enemies.size());
+            if (frame.cutscene_active) {
+                overlay->text("Cutscene: %s", frame.cutscene_event == nullptr
+                              ? "..." : frame.cutscene_event->subtitle_ptbr.c_str());
+            }
+            if (overlay->button("Skip cutscene")) {
+                pending_command = khdays::ps5::world::Command::SkipCutscene;
+            }
+            if (overlay->button("Attack")) {
+                pending_command = khdays::ps5::world::Command::Attack;
+            }
             if (media != nullptr) {
                 const auto stats = media->stats();
                 overlay->text("Textures: %zu  Meshes: %zu",
