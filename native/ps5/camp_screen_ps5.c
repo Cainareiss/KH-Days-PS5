@@ -17,6 +17,9 @@ void khdays_camp_screen_applied(int yes)
 
 SDL_GamepadType SDL_GetGamepadType(SDL_Gamepad *gamepad)
 {
-    (void)gamepad;
-    return SDL_GAMEPAD_TYPE_UNKNOWN;
+    /* The PS5 host supplies a DualSense token from
+     * one_screen_host_stubs_ps5.c.  Returning the real family here makes the
+     * shared settings/prompt renderer choose PlayStation glyphs instead of
+     * the generic/DS fallback. */
+    return gamepad != NULL ? SDL_GAMEPAD_TYPE_PS5 : SDL_GAMEPAD_TYPE_UNKNOWN;
 }
