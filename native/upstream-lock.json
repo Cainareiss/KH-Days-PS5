@@ -1,0 +1,11 @@
+{
+  "project": "https://github.com/Yokimitsuro/khdays-port",
+  "version": "0.1.1",
+  "commit": "a7ee5a2d6c423ad69df7405a30f63e858f8e2acc",
+  "decomp_commit": "a2b0478b87e3102732094c34f6ca89595f98ab93",
+  "supported_rom": {
+    "game_code": "YKGP",
+    "region": "Europe",
+    "sha256": "1ecf5e7a41a2ae48e7c5fd3f678e5a79e854d843f1a1fa3a952a41b14e51ec4f"
+  }
+}

@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
-    [string]$SourceRoot = "E:\DOCUMENTOS\KH-ReCoded-PTBR\tools\khdays-port\data\extracted\3cbbe3f15b49fc26\nitrofs",
-    [string]$SystemRoot = "E:\DOCUMENTOS\KH-ReCoded-PTBR\tools\khdays-port\data\extracted\3cbbe3f15b49fc26\system",
+    [Parameter(Mandatory = $true)]
+    [string]$SourceRoot,
+    [Parameter(Mandatory = $true)]
+    [string]$SystemRoot,
     [string]$DestinationRoot = "..\build-full-game-data\data",
     [switch]$CleanDestination
 )

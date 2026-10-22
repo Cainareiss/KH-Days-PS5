@@ -1,10 +1,29 @@
-# KH Days PS5 — plano de port do runtime
+# KH Days PS5 — runtime nativo experimental
 
-> **WIP / adaptação em andamento.** Este repositório ainda não contém uma
-> build PS5 jogável nem promete compatibilidade com firmware específico.
+> **WIP / adaptação em andamento.** Esta é uma build experimental de
+> desenvolvimento. O funcionamento no PS5, a primeira missão e a
+> compatibilidade com firmware específico ainda não estão garantidos.
+
+O repositório é público para permitir auditoria e reprodução do trabalho. A
+release contém somente o código e os testes. ROMs, dumps, assets, `eboot.bin`,
+imagens exFAT e outros dados comerciais não são distribuídos aqui: use apenas
+dados que você tenha direito de usar e forneça-os localmente seguindo
+[`docs/LOCAL-DATA-WORKFLOW.md`](docs/LOCAL-DATA-WORKFLOW.md).
 
 Consulte [`STATUS.md`](STATUS.md) para o que já foi concluído e o que continua
 pendente.
+
+O estado verificado do executável nativo, das bibliotecas e da capa/fundo está
+em [`docs/NATIVE-EXECUTABLE-STATUS.md`](docs/NATIVE-EXECUTABLE-STATUS.md).
+
+A retomada sobre o código decompilado real está documentada em
+[`docs/NATIVE-PORT-BASELINE.md`](docs/NATIVE-PORT-BASELINE.md).
+
+O resultado da verificação da ROM europeia fornecida está em
+[`docs/NATIVE-PORT-ROM-REPORT.md`](docs/NATIVE-PORT-ROM-REPORT.md).
+
+Para reproduzir uma release pública e conferir exatamente o que foi enviado,
+veja [`docs/PUBLIC-RELEASE.md`](docs/PUBLIC-RELEASE.md).
 
 O procedimento para usar dados locais sem publicá-los está em
 [`docs/LOCAL-DATA-WORKFLOW.md`](docs/LOCAL-DATA-WORKFLOW.md).
@@ -15,9 +34,9 @@ nome “374 Days” foi tratado como referência a **358/2 Days**.
 
 ## Estado real do ponto de partida
 
-- `KH-ReCoded-PTBR/tools/khdays-port` é um runtime nativo experimental para
-  PC. Ele já possui pipeline de assets e front-end, mas o gameplay completo
-  ainda está em desenvolvimento.
+- O caminho nativo agora usa `khdays-port` 0.1.1 fixado por commit. Essa versão
+  executa o jogo inteiro no PC, embora o projeto upstream ainda seja WIP; no
+  PS5, a adaptação das interfaces de plataforma continua em andamento.
 - O runtime de PC usa SDL3, `SDL_Renderer` e `SDL_GPU`; essas chamadas não
   formam, por si só, um executável PS5.
 - Este projeto não contém ROM, assets, dumps ou binários proprietários. O
@@ -62,7 +81,8 @@ direta para VideoOut, controles, áudio e Vulkan.
 - Não há execução automatizada neste workspace contra um PS5 homebrew. Sem o
   teste no console não é possível afirmar que Vulkan/VideoOut ou `sceAudioOut`
   funcionam no hardware.
-- O port de origem ainda não implementa o fluxo completo de todas as missões.
+- O port de origem 0.1.1 executa o jogo completo no Windows; o bloqueio atual é
+  portar e validar no PS5 as interfaces de host usadas por esse código real.
 
 ## Referências públicas
 

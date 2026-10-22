@@ -4,6 +4,10 @@ build-*/
 out/
 dist/
 .cache/
+build-native-prepare*.log
+build-native-game*.log
+__pycache__/
+*.pyc
 
 # Local SDK/toolchain installations
 toolchains/
@@ -33,4 +37,9 @@ mods/
 *.swp
 Thumbs.db
 .DS_Store
+
+# Local interpreter copies and diagnostics
+tools/python3.exe
+*.log
+*.err.log
 

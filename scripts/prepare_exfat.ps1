@@ -3,7 +3,8 @@ param(
     [string]$BundleRoot = "..\build-ps5-app\PPSA12345",
     [string]$OutputRoot = "..\build-ps5-exfat-final\homebrew\PPSA12345",
     [string]$UsbRoot = "",
-    [string]$AssetRoot = "E:\DOCUMENTOS\KH-ReCoded-PTBR\tools\khdays-port\data\extracted\3cbbe3f15b49fc26\nitrofs"
+    [Parameter(Mandatory = $true)]
+    [string]$AssetRoot
 )
 
 $ErrorActionPreference = "Stop"

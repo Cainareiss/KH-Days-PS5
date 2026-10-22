@@ -46,7 +46,7 @@ alimenta e fecha a porta por `sceAudioOutInit`, `sceAudioOutOpen`,
 ## Build Prospero validado
 
 ```powershell
-$sdk = "E:\DOCUMENTOS\KH-Days-PS5\toolchains\ps5-payload-sdk-v0.44\ps5-payload-sdk"
+$sdk = "<local-sdk-root>\ps5-payload-sdk"
 $env:PS5_PAYLOAD_SDK = $sdk
 cmake -S . -B build-ps5-media -G Ninja `
   -DCMAKE_TOOLCHAIN_FILE="$sdk\toolchain\prospero.cmake" `

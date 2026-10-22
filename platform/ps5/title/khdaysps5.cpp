@@ -46,10 +46,14 @@ public:
 
     VulkanExample() : VulkanExampleBase() {
         title = "KH Days PS5";
-        apiVersion = VK_API_VERSION_1_3;
-        useDynamicRendering = true;
-        requiresStencil = true;
-        deviceCreatepNextChain = &baseDynamicRenderingFeatures;
+        // Start with the template's proven PS5 render-pass path.  The
+        // dynamic-rendering path was entering the title before any frame was
+        // presented on firmware 13.60, so keep 1.0/legacy render passes for
+        // the bootable slice and re-enable 1.3 only after a console probe.
+        apiVersion = VK_API_VERSION_1_0;
+        useDynamicRendering = false;
+        requiresStencil = false;
+        deviceCreatepNextChain = nullptr;
         camera.type = Camera::CameraType::lookat;
         camera.setPosition(glm::vec3(0.0f, 0.0f, -6.0f));
         camera.setRotation(glm::vec3(-12.0f, 25.0f, 0.0f));
@@ -182,11 +186,12 @@ public:
                                  VkPipeline* output) {
             const VkGraphicsPipelineCreateInfo info{
                 VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-                &rendering, 0U,
+                useDynamicRendering ? static_cast<const void*>(&rendering) : nullptr, 0U,
                 static_cast<std::uint32_t>(shaders.size()), shaders.data(),
                 &vertex, &input_assembly, nullptr, &viewport, &rasterizer,
                 &multisample, &depth, &blend, &dynamic,
-                layout, VK_NULL_HANDLE, 0U, VK_NULL_HANDLE, -1};
+                layout, useDynamicRendering ? VK_NULL_HANDLE : renderPass, 0U,
+                VK_NULL_HANDLE, -1};
             VK_CHECK_RESULT(vkCreateGraphicsPipelines(
                 device, pipelineCache, 1U, &info, nullptr, output));
         };
@@ -349,13 +354,24 @@ public:
         const VkCommandBufferBeginInfo begin =
             vks::initializers::commandBufferBeginInfo();
         VK_CHECK_RESULT(vkBeginCommandBuffer(command, &begin));
-        beginDynamicRendering(command);
         const VkViewport viewport = vks::initializers::viewport(
             static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f);
         const VkRect2D scissor = vks::initializers::rect2D(width, height, 0, 0);
         vkCmdSetViewport(command, 0U, 1U, &viewport);
         vkCmdSetScissor(command, 0U, 1U, &scissor);
 
+        if (!useDynamicRendering) {
+            VkClearValue clearValues[2]{};
+            clearValues[0].color = defaultClearColor;
+            clearValues[1].depthStencil = {1.0f, 0};
+            VkRenderPassBeginInfo pass = vks::initializers::renderPassBeginInfo();
+            pass.renderPass = renderPass;
+            pass.framebuffer = frameBuffers[currentImageIndex];
+            pass.renderArea.extent = {width, height};
+            pass.clearValueCount = 2U;
+            pass.pClearValues = clearValues;
+            vkCmdBeginRenderPass(command, &pass, VK_SUBPASS_CONTENTS_INLINE);
+        }
         if (!draw_video(command) && media != nullptr) {
             vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS,
                               mesh_pipeline);
@@ -368,7 +384,9 @@ public:
             }
         }
         drawUI(command);
-        endDynamicRendering(command);
+        if (!useDynamicRendering) {
+            vkCmdEndRenderPass(command);
+        }
         VK_CHECK_RESULT(vkEndCommandBuffer(command));
     }
 

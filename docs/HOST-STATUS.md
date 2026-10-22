@@ -1,6 +1,6 @@
 # Diagnóstico inicial do host
 
-Executado em 13/10/2026 no workspace `E:\DOCUMENTOS`.
+Executado em 13/10/2026 no workspace local do desenvolvedor.
 
 | Componente | Resultado |
 |---|---|

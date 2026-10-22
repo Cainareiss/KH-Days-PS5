@@ -2,7 +2,8 @@
 param(
     [string]$TitleRoot = "..\build-vulkan-title",
     [string]$TemplateRoot = "..\toolchains\sources\PS5_VulkanTemplate",
-    [string]$PcPortRoot = "E:\DOCUMENTOS\KH-ReCoded-PTBR\tools\khdays-port",
+    [Parameter(Mandatory = $true)]
+    [string]$PcPortRoot,
     [string]$DataRoot = "..\build-full-game-data\data",
     [switch]$StageData
 )

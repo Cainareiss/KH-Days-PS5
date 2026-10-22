@@ -5,8 +5,8 @@
 Com o SDK e LLVM configurados:
 
 ```powershell
-$sdk = "E:\DOCUMENTOS\KH-Days-PS5\toolchains\ps5-payload-sdk-v0.44\ps5-payload-sdk"
-$llvm = "E:\DOCUMENTOS\KH-Days-PS5\toolchains\llvm-23.1.3\clang+llvm-23.1.3-x86_64-pc-windows-msvc\bin"
+$sdk = "<local-sdk-root>\ps5-payload-sdk"
+$llvm = "<local-llvm-root>\bin"
 $env:PS5_PAYLOAD_SDK = $sdk
 $env:Path = "$llvm;$sdk\win;$env:Path"
 cmake -S . -B build-ps5-runtime -G Ninja `
