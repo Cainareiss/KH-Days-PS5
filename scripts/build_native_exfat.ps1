@@ -14,6 +14,8 @@ param(
     [string]$RomPath = "",
     [string]$MelonProjectRoot = "",
     [string]$ImagePath = "build-native-exfat/dist/PPSA35820-native.exfat",
+    [string]$StageRoot = "build-native-exfat/stage",
+    [string]$HdAssetsRoot = "",
     [Parameter(Mandatory = $true)]
     [string]$ImageBuilder,
     [switch]$ReuseStage,
@@ -40,8 +42,10 @@ $background = Resolve-ProjectPath $BackgroundPath
 $rom = if ([IO.Path]::IsPathRooted($RomPath)) { [IO.Path]::GetFullPath($RomPath) } else { Resolve-ProjectPath $RomPath }
 $melonRoot = if ([IO.Path]::IsPathRooted($MelonProjectRoot)) { [IO.Path]::GetFullPath($MelonProjectRoot) } else { Resolve-ProjectPath $MelonProjectRoot }
 $image = Resolve-ProjectPath $ImagePath
+$stageRoot = if ([IO.Path]::IsPathRooted($StageRoot)) { [IO.Path]::GetFullPath($StageRoot) } else { Resolve-ProjectPath $StageRoot }
+$hdAssets = if ([string]::IsNullOrWhiteSpace($HdAssetsRoot)) { $null } elseif ([IO.Path]::IsPathRooted($HdAssetsRoot)) { [IO.Path]::GetFullPath($HdAssetsRoot) } else { Resolve-ProjectPath $HdAssetsRoot }
 $builder = Resolve-ProjectPath $ImageBuilder
-$stage = Join-Path $project "build-native-exfat\stage\$TitleId"
+$stage = Join-Path $stageRoot $TitleId
 
 if ($TitleId -notmatch '^PPSA\d{5}$') { throw "TitleId must use the PS5 PPSA##### form" }
 foreach ($required in @($eboot, $data, $libc, $icon, $background, $builder, $executableValidation)) {
@@ -49,6 +53,9 @@ foreach ($required in @($eboot, $data, $libc, $icon, $background, $builder, $exe
 }
 if ([string]::IsNullOrWhiteSpace($RomPath)) { $rom = $null }
 if ([string]::IsNullOrWhiteSpace($MelonProjectRoot)) { $melonRoot = $null }
+if ($null -ne $hdAssets -and -not (Test-Path -LiteralPath $hdAssets -PathType Container)) {
+    throw "HD assets root does not exist: $hdAssets"
+}
 if ($eboot -like "*build-vulkan-title-4*") {
     throw "Refusing the previous prototype eboot; pass the native port's final eboot.bin"
 }
@@ -112,7 +119,7 @@ if (-not $FinalizeExistingImage) {
 if ($RefreshData) {
     # This is generated staging output only, never the source extraction.
     $stagedData = [IO.Path]::GetFullPath((Join-Path $stage 'data\extracted'))
-    $allowedData = [IO.Path]::GetFullPath((Join-Path $project "build-native-exfat\stage\$TitleId\data\extracted"))
+    $allowedData = [IO.Path]::GetFullPath((Join-Path $stageRoot "$TitleId\data\extracted"))
     if ($stagedData -ne $allowedData -or $data.StartsWith($stagedData, [StringComparison]::OrdinalIgnoreCase)) {
         throw 'Refusing to refresh a path outside the generated native data staging directory'
     }
@@ -154,6 +161,25 @@ if (-not $ReuseStage -or $RefreshData) {
     }
 } else {
     Write-Host "Reusing staging tree; native cartridge will be validated before packaging: $stage"
+}
+
+# Optional local HD output from the PC collection. It is copied only into the
+# generated staging tree; the PC installation and source extraction stay
+# untouched. The native PS5 decoder still has to be enabled separately for
+# MP4 playback, but layouts and subtitles can be staged now.
+if ($null -ne $hdAssets) {
+    foreach ($relative in @('mods', 'data\cutscenes')) {
+        $source = Join-Path $hdAssets $relative
+        if (-not (Test-Path -LiteralPath $source -PathType Container)) {
+            Write-Warning "HD asset subtree not found; skipping: $source"
+            continue
+        }
+        $destination = Join-Path $stage $relative
+        New-Item -ItemType Directory -Path $destination -Force | Out-Null
+        foreach ($entry in Get-ChildItem -LiteralPath $source -Force) {
+            Copy-Item -LiteralPath $entry.FullName -Destination $destination -Recurse -Force
+        }
+    }
 }
 
 $stageDataProof = Join-Path $project 'build-native-exfat/data-stage.validation.json'
@@ -252,6 +278,7 @@ $report = [ordered]@{
     sectorBytes = $sectorBytes
     clusterBytes = $clusterBytes
     hardwareTest = "Pending"
+    hdAssetsRoot = $hdAssets
     nativeLinkValidation = $executableValidation
     directSyscallInstructions = $nativeLink.directSyscallInstructions
 }

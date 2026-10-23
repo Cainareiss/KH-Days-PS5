@@ -76,6 +76,28 @@ build-native-exfat/dist/PPSA35820-native.exfat.validation.json
 O relatório registra os hashes do exFAT e do `eboot`, a origem dos dados e o
 status `hardwareTest: Pending`. O teste no PS5 continua sendo obrigatório.
 
+## Staging HD local em outro volume
+
+O empacotador também aceita `-StageRoot` e `-HdAssetsRoot`, mantendo os
+defaults anteriores quando esses parâmetros não são usados. Assim, a base do
+projeto pode permanecer em um volume quase cheio e a imagem pode ser criada
+em outro volume:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_native_exfat.ps1 `
+  -EbootPath .\build-native-game-ps5\eboot.bin `
+  -LibcPrxPath .\build-native-link\PPSA35820\sce_module\libc.prx `
+  -ImagePath F:\KH-Days-PS5-exfat-hd-20261023\dist\PPSA35820-native-hd.exfat `
+  -StageRoot F:\KH-Days-PS5-exfat-hd-20261023\stage `
+  -HdAssetsRoot F:\KH-Days-HD-work-20261023\tool-runner `
+  -ImageBuilder E:\DOCUMENTOS\ShadowMountPlus-tool\New-OsfExfatImage.ps1 `
+  -ReuseStage
+```
+
+`-HdAssetsRoot` é opcional e aponta apenas para dados extraídos localmente.
+Os assets comerciais não entram no GitHub. A reprodução de MP4 no PS5 continua
+pendente enquanto `movie_hd_unavailable_ps5.c` estiver ativo.
+
 ## Estado atual
 
 A extração da ROM europeia fornecida já está disponível, mas o gerador de
