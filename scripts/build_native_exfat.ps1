@@ -139,9 +139,9 @@ Copy-Item -LiteralPath $icon -Destination (Join-Path $stage "sce_sys\icon0.png")
 Copy-Item -LiteralPath $background -Destination (Join-Path $stage "sce_sys\pic0.png") -Force
 
 # Keep the same auxiliary layout used by the known-good Melon Mix image.
-if (Test-Path -LiteralPath $rom) {
+if ($null -ne $rom -and (Test-Path -LiteralPath $rom)) {
     Copy-Item -LiteralPath $rom -Destination (Join-Path $stage "roms\kh-days.nds") -Force
-} else {
+} elseif ($null -ne $rom) {
     Write-Warning "EU ROM not found; continuing without roms/kh-days.nds: $rom"
 }
 if ($null -ne $melonRoot) {
