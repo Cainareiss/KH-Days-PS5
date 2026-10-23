@@ -66,6 +66,11 @@ def copy_hd_tools(port_root: Path, out: Path) -> Path:
     target.mkdir(parents=True, exist_ok=True)
     for path in source.glob("*.py"):
         shutil.copy2(path, target / path.name)
+    # Mission/cine generators import the shared data decompressor from the
+    # sibling tools directory.
+    shared = port_root / "tools" / "decompress_data.py"
+    if shared.is_file():
+        shutil.copy2(shared, target.parent / shared.name)
     return target
 
 
@@ -81,6 +86,7 @@ def main() -> int:
     ap.add_argument("--port-root", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--languages", nargs="+", default=["en"])
+    ap.add_argument("--game-data", type=Path, help="prepared extraction root, for mission/cine layouts")
     args = ap.parse_args()
 
     pc = args.pc_root.resolve()
@@ -122,6 +128,19 @@ def main() -> int:
     if settings.is_dir():
         run_tool(tools / "theater_settings.py", [str(settings), "--mod", "HD PACK", "--lang", *args.languages], runner_root)
 
+    if args.game_data is not None:
+        game_data = args.game_data.resolve()
+        run_tool(
+            tools / "theater_mission.py",
+            [str(mare), "--mod", "HD PACK", "--lang", *args.languages, "--data", str(game_data)],
+            runner_root,
+        )
+        run_tool(
+            tools / "theater_cine.py",
+            [str(mare), "--mod", "HD PACK", "--lang", *args.languages, "--data", str(game_data)],
+            runner_root,
+        )
+
     movies = pc / "EPIC" / "Mare" / "MOVIE" / "Days" / "en"
     if not movies.is_dir():
         raise SystemExit(f"Epic movie folder not found: {movies}")
@@ -141,7 +160,11 @@ def main() -> int:
             "files": len(list(movies.glob("*.mp4"))),
             "sha256": hashlib.sha256("\n".join(sorted(p.name for p in movies.glob("*.mp4"))).encode()).hexdigest(),
         },
-        "generated": ["HD PACK title/settings layouts", "cinematics videos/subtitles"],
+        "generated": [item for item in [
+            "HD PACK title/settings layouts",
+            "HD PACK mission/rooms/cine layouts" if args.game_data is not None else None,
+            "cinematics videos/subtitles",
+        ] if item is not None],
         "commercialDataPublished": False,
     }
     (out / "local-extraction-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
