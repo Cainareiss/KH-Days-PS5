@@ -36,10 +36,10 @@ static void ensure_profile(void)
         }
     }
 
-    /* Options opens the native settings overlay.  Keep the second slot empty
-     * rather than advertising the PS button, which the firmware reserves. */
+    /* The title's Settings entry uses Triangle. The host only consumes it
+     * while that entry exists; Options keeps the game's DS Start action. */
     ps5_profile.input[KHDAYS_DEVICE_GAMEPAD][KHDAYS_LAYER_BASE][KHDAYS_ACT_OPEN_SETTINGS][0] =
-        KHDAYS_PAD_START;
+        KHDAYS_PAD_NORTH;
     ps5_profile.input[KHDAYS_DEVICE_GAMEPAD][KHDAYS_LAYER_BASE][KHDAYS_ACT_OPEN_SETTINGS][1] =
         KHDAYS_NO_INPUT;
     ps5_profile_ready = 1;

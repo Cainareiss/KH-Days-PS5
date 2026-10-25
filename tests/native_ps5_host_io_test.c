@@ -93,6 +93,39 @@ static void test_input(void)
     khdays_ps5_host_io_pause(0);
 }
 
+static void test_title_settings_input(void)
+{
+    KhdaysInputSnapshot out;
+    test_pad = (struct pad){.held = PAD_OPTIONS | PAD_TRIANGLE};
+    khdays_ps5_host_io_title_settings(0);
+    khdays_host_input(&out);
+    assert(out.ds_buttons == (KHDAYS_KEY_START | KHDAYS_KEY_X));
+    khdays_ps5_host_io_title_settings(1);
+    khdays_host_input(&out);
+    assert(out.ds_buttons == KHDAYS_KEY_START);
+    const uint32_t menu = khdays_ps5_host_io_menu_buttons();
+    assert((menu & (KHDAYS_PS5_MENU_OPTIONS | KHDAYS_PS5_MENU_TRIANGLE)) ==
+           (KHDAYS_PS5_MENU_OPTIONS | KHDAYS_PS5_MENU_TRIANGLE));
+    khdays_ps5_host_io_title_settings(0);
+    khdays_host_input(&out);
+    assert(out.ds_buttons == (KHDAYS_KEY_START | KHDAYS_KEY_X));
+    test_pad = (struct pad){0};
+    khdays_host_input(&out);
+    khdays_ps5_host_io_settings_menu(1);
+    test_pad.held = PAD_OPTIONS | PAD_CROSS;
+    khdays_host_input(&out);
+    assert(out.ui_open && out.ds_buttons == 0);
+    khdays_ps5_host_io_settings_menu(0);
+    khdays_host_input(&out);
+    assert(!out.ui_open && out.ds_buttons == 0); /* close buttons await release */
+    test_pad.held = 0;
+    khdays_host_input(&out);
+    test_pad.held = PAD_OPTIONS | PAD_CROSS;
+    khdays_host_input(&out);
+    assert(out.ds_buttons == (KHDAYS_KEY_START | KHDAYS_KEY_B));
+    test_pad = (struct pad){0};
+}
+
 static void test_audio(void)
 {
     float input[] = {2.0f, -2.0f, 0.5f, NAN};
@@ -195,6 +228,7 @@ static void test_lifecycle(void)
 int main(void)
 {
     test_input();
+    test_title_settings_input();
     test_input_without_present();
     test_audio();
     test_lifecycle();

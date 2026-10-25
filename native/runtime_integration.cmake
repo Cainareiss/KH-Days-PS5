@@ -34,8 +34,8 @@ endif()
 add_library(khdays-native-ps5-runtime STATIC
     ${KHDAYS_NATIVE_PS5_RUNTIME_C_SOURCES}
     ps5/start_ps5.c ps5/rom_ps5.c ps5/paths_ps5.c
-    ps5/host_services_ps5.c ps5/host_video_ps5.c ps5/host_io_ps5.c
-    ps5/memory_ps5.c ps5/movie_hd_unavailable_ps5.c ps5/movie_subtitles_ps5.c
+    ps5/host_services_ps5.c ps5/host_video_ps5.c ps5/host_io_ps5.c ps5/graphics_menu_ps5.c
+    ps5/memory_ps5.c ps5/movie_hd_plmpeg_ps5.c ps5/movie_subtitles_ps5.c
     ps5/sdl_gpu_vulkan.c ps5/vulkan_game_renderer.c ps5/camp_screen_ps5.c
     ps5/one_screen_host_stubs_ps5.c
     "${KHDAYS_NATIVE_UPSTREAM_ROOT}/port/host/render/onescreen.c"

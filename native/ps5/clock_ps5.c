@@ -6,6 +6,10 @@
 #include <stdint.h>
 #include <time.h>
 
+/* The native settings overlay must remain responsive while holding the game
+ * clock, when no normal frame is being published. */
+extern void khdays_ps5_video_settings_tick(void);
+
 static pthread_mutex_t state_lock = PTHREAD_MUTEX_INITIALIZER;
 static uint64_t start_ns;
 static uint64_t paused_at_ns;
@@ -96,6 +100,7 @@ static void sleep_until(u64 cycle, int wakeable)
 {
     const struct timespec one_ms = {0, 1000000};
     for (;;) {
+        khdays_ps5_video_settings_tick();
         const u64 now = khdays_clock_cycles();
         u64 remaining;
         if (now >= cycle || (wakeable && take_wake())) {

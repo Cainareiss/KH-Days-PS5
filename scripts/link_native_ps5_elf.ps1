@@ -36,9 +36,11 @@ $compatObject = Join-Path $build 'title_compat_ps5.o'
 $syscallAudit = ProjectPath 'scripts/validate_native_title_syscalls.py'
 $recordsAudit = ProjectPath 'scripts/validate_native_link_records.py'
 $vulkanAudit = ProjectPath 'scripts/validate_native_vulkan_link.py'
+$freshnessAudit = ProjectPath 'scripts/native_link_freshness.py'
 $objdump = Join-Path $llvm 'llvm-objdump.exe'
+$mainSource = ProjectPath 'native/ps5/main_ps5.c'
 $main = if ($MainObject -ne "") { ProjectPath $MainObject } else {
-    Join-Path $build "CMakeFiles/khdays-native-ps5-elf.dir/ps5/main_ps5.c.o"
+    Join-Path $build 'main_ps5.o'
 }
 $out = Join-Path $build $OutputName
 $script = ProjectPath "native/ps5/title_layout.ld"
@@ -59,12 +61,28 @@ $stubs = @(Get-ChildItem -LiteralPath $sdk -Filter '*.so' | Where-Object {
         'libkernel_stub_weak.so', 'libc_stub_weak.so', 'libScePosixForWebKit.so')
 })
 
-foreach ($required in @($ld, $clangxx, $readelf, $nm, $nativeTool, $main, $script, $tables, $radv,
+# A valid signature only proves that eboot matches an old ELF. Rebuild the
+# incremental runtime target first so newly edited controller/UI/movie code
+# actually reaches the archives used below. This does not select the full game
+# target and does not recompile unchanged objects.
+$cmake = (Get-Command cmake -CommandType Application -ErrorAction Stop).Source
+& $cmake --build $build --target khdays-native-ps5-runtime
+if ($LASTEXITCODE -ne 0) { throw "Native PS5 runtime build failed ($LASTEXITCODE); refusing to link stale archives" }
+
+foreach ($required in @($ld, $clangxx, $readelf, $nm, $nativeTool, $mainSource, $script, $tables, $radv,
                         $clang, $agcSource, $agcDriverSource, $appCrtSource, $fpSource, $compatSource,
-                        $syscallAudit, $recordsAudit, $vulkanAudit, $objdump) + $archives + $sdkLibs) {
+                        $syscallAudit, $recordsAudit, $vulkanAudit, $freshnessAudit, $objdump) + $archives + $sdkLibs) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Missing native link input: $required"
     }
+}
+if ($MainObject -ne '' -and -not (Test-Path -LiteralPath $main -PathType Leaf)) {
+    throw "Missing native link entry object: $main"
+}
+if ($MainObject -eq '') {
+    & $clang --target=x86_64-sie-ps5 -isystem $sdkInclude -I (ProjectPath 'native/ps5') `
+        -fPIC -fno-stack-protector -Wall -Wextra -Werror -c $mainSource -o $main
+    if ($LASTEXITCODE -ne 0) { throw "PS5 native entrypoint compilation failed ($LASTEXITCODE)" }
 }
 
 # Match the PS5 title CRT and linker layout used by Melon Mix. This changes
@@ -160,6 +178,20 @@ $args = @(
     $archiveArgs + $sdkLibs + @("--end-group", "--as-needed") +
     @($stubs | ForEach-Object FullName) + @("--no-as-needed", $agcStub, $agcDriverStub)
 
+$inputSnapshot = Join-Path $build 'native-link-inputs.pending.json'
+$inputProof = Join-Path $build 'native-link-inputs-validation.json'
+$inputArgs = @('snapshot', '--project', $project, '--build', $build, '--output', $inputSnapshot)
+foreach ($linkInput in (@($main, $fpObject, $compatObject, $appCrtObject, $script, $tables, $symbolMap,
+    $agcStub, $agcDriverStub, $ld, $clang, $clangxx, $nativeTool) + $archives + $sdkLibs +
+    @($stubs | ForEach-Object FullName))) {
+    $inputArgs += @('--input', $linkInput)
+}
+foreach ($source in @($appCrtSource, $fpSource, $compatSource, $agcSource, $agcDriverSource)) {
+    $inputArgs += @('--source', $source)
+}
+& python $freshnessAudit @inputArgs
+if ($LASTEXITCODE -ne 0) { throw 'Unable to capture native link inputs; refusing to link' }
+
 & $ld @args
 if ($LASTEXITCODE -ne 0) { throw "ld.lld failed ($LASTEXITCODE)" }
 $vulkanReport = Join-Path $build 'native-vulkan-dispatch-validation.json'
@@ -225,6 +257,10 @@ if ($LASTEXITCODE -ne 0 -or $inspection -notmatch "integrity:\s*valid") {
     throw "PS5 FSELF inspection failed: $inspection"
 }
 
+& python $freshnessAudit seal --snapshot $inputSnapshot --project $project `
+    --elf $out --fself $fself --output $inputProof
+if ($LASTEXITCODE -ne 0) { throw 'Native sources or link inputs changed during linking; rebuild/relink before packaging' }
+
 $report = [ordered]@{
     stage = "native_ps5_elf_linked"
     elf = $out
@@ -243,6 +279,7 @@ $report = [ordered]@{
     syscallValidation = $syscallReport
     recordsValidation = $recordsReport
     vulkanDispatchValidation = $vulkanReport
+    linkInputsValidation = $inputProof
     convertedElfSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $converted).Hash
     fself = $fself
     fselfSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $fself).Hash

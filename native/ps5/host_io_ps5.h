@@ -18,12 +18,19 @@ extern "C" {
 int khdays_ps5_host_io_init(void);
 void khdays_ps5_host_io_poll(void);
 void khdays_ps5_host_io_shutdown(void);
+uint32_t khdays_ps5_host_io_menu_buttons(void);
+void khdays_ps5_host_io_settings_menu(int active);
+/* Only a visible title composition's Settings button owns Triangle.
+ * Options always remains the game's DS Start input. */
+void khdays_ps5_host_io_title_settings(int available);
 
 /* KHDAYS_ENH_* from host/app/host.h. Defaults enable analog movement, analog
  * camera and separate lock-on, retaining the DS face-button layout. */
 void khdays_ps5_host_io_enhancements(uint16_t flags);
 void khdays_ps5_host_io_pause(int pause);
 void khdays_ps5_host_io_mute(int mute);
+void khdays_ps5_host_io_movie_audio(const float *interleaved_stereo, int count, float gain);
+void khdays_ps5_host_io_movie_audio_stop(void);
 
 #ifdef __cplusplus
 }

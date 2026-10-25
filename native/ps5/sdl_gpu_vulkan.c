@@ -110,6 +110,12 @@ struct SDL_GPUDevice {
 };
 
 static char last_error[512];
+static VkFilter presentation_filter = VK_FILTER_NEAREST;
+
+void khdays_vk_set_filter(unsigned linear)
+{
+    presentation_filter = linear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+}
 
 static bool command_error(SDL_GPUCommandBuffer *command, const char *format, ...)
 {
@@ -1280,7 +1286,7 @@ static void blit(SDL_GPUDevice *device, SDL_GPUTexture *texture, VkImage target,
     region.dstOffsets[0] = (VkOffset3D){left, top, 0};
     region.dstOffsets[1] = (VkOffset3D){left + width, top + height, 1};
     vkCmdBlitImage(device->command, texture->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                   target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region, VK_FILTER_NEAREST);
+                   target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region, presentation_filter);
 }
 
 bool khdays_vk_present(SDL_GPUDevice *device, SDL_GPUTexture *upper, SDL_GPUTexture *lower,

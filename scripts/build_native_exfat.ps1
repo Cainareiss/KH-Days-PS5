@@ -16,6 +16,7 @@ param(
     [string]$ImagePath = "build-native-exfat/dist/PPSA35820-native.exfat",
     [string]$StageRoot = "build-native-exfat/stage",
     [string]$HdAssetsRoot = "",
+    [string]$ImageSize = "",
     [Parameter(Mandatory = $true)]
     [string]$ImageBuilder,
     [switch]$ReuseStage,
@@ -66,6 +67,25 @@ if ((Test-Path -LiteralPath $stage) -and -not $ReuseStage -and -not $FinalizeExi
     throw "Staging directory already exists; pass -ReuseStage to rebuild the image from it: $stage"
 }
 
+$hdAssetsValidator = Join-Path $PSScriptRoot 'validate_ps5_hd_assets.py'
+$hdSourceProof = Join-Path $project 'build-native-exfat/hd-assets-source.validation.json'
+$hdStageProof = Join-Path $project 'build-native-exfat/hd-assets-stage.validation.json'
+$hdAssetsValidation = $null
+$hdMovieCount = 0
+$hdMovieBytes = 0L
+if ($null -ne $hdAssets) {
+    # A hash-matched movies-only tree is not a complete HD runtime package.
+    # Reject missing title layouts, atlases, Settings prompts and mismatched
+    # movie paths before changing staging or creating/replacing any image.
+    & python $hdAssetsValidator --root $hdAssets --report $hdSourceProof
+    if ($LASTEXITCODE -ne 0) { throw 'Incomplete or invalid HD runtime inputs; refusing to package' }
+}
+function Test-StagedHdAssets {
+    & python $hdAssetsValidator --root $stage --report $hdStageProof --expected-report $hdSourceProof | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw 'Staged HD runtime assets do not match the validated inputs' }
+    return Get-Content -LiteralPath $hdStageProof -Raw | ConvertFrom-Json
+}
+
 $ebootFile = Get-Item -LiteralPath $eboot
 if ($ebootFile.Length -lt 4096) { throw "Native eboot.bin is unexpectedly small" }
 $nativeLink = Get-Content -LiteralPath $executableValidation -Raw | ConvertFrom-Json
@@ -76,6 +96,14 @@ if ($nativeLink.fselfSha256 -ne $sourceEbootHash -or
     $nativeLink.directSyscallInstructions -ne 0) {
     throw 'Eboot is stale or has not passed the native-title syscall audit; relink before packaging'
 }
+if (-not $nativeLink.linkInputsValidation -or
+    -not (Test-Path -LiteralPath $nativeLink.linkInputsValidation -PathType Leaf)) {
+    throw 'Relink with the native source/archive freshness audit before packaging; this eboot has no input proof'
+}
+$freshnessAudit = Join-Path $PSScriptRoot 'native_link_freshness.py'
+& python $freshnessAudit verify --proof $nativeLink.linkInputsValidation --project $project `
+    --elf-sha256 $nativeLink.sha256 --fself-sha256 $sourceEbootHash
+if ($LASTEXITCODE -ne 0) { throw 'Native eboot does not contain the current sources/archives; rebuild/relink before packaging' }
 $syscallProof = Get-Content -LiteralPath $nativeLink.syscallValidation -Raw | ConvertFrom-Json
 if (-not $syscallProof.passed -or $syscallProof.direct_syscall_count -ne 0 -or
     $syscallProof.decoded_instruction_count -le 0 -or $syscallProof.sha256 -ne $nativeLink.sha256) {
@@ -163,16 +191,16 @@ if (-not $ReuseStage -or $RefreshData) {
     Write-Host "Reusing staging tree; native cartridge will be validated before packaging: $stage"
 }
 
-# Optional local HD output from the PC collection. It is copied only into the
-# generated staging tree; the PC installation and source extraction stay
-# untouched. The native PS5 decoder still has to be enabled separately for
-# MP4 playback, but layouts and subtitles can be staged now.
+# Native PS5 HD assets, required in full when HdAssetsRoot is supplied.
+# They are copied only into the generated
+# staging tree; the PC installation and source extraction stay untouched.
+# The PS5 runtime consumes decoder-verified MPEG-1/MP2 videos at
+# data/cutscenes/cinematics/hd<ID>.mpg (not the PC MP4 files).
 if ($null -ne $hdAssets) {
     foreach ($relative in @('mods', 'data\cutscenes')) {
         $source = Join-Path $hdAssets $relative
         if (-not (Test-Path -LiteralPath $source -PathType Container)) {
-            Write-Warning "HD asset subtree not found; skipping: $source"
-            continue
+            throw "Required HD asset subtree not found: $source"
         }
         $destination = Join-Path $stage $relative
         New-Item -ItemType Directory -Path $destination -Force | Out-Null
@@ -180,6 +208,12 @@ if ($null -ne $hdAssets) {
             Copy-Item -LiteralPath $entry.FullName -Destination $destination -Recurse -Force
         }
     }
+
+    $hdAssetsValidation = Test-StagedHdAssets
+    $hdMovieCount = $hdAssetsValidation.movieCount
+    $hdMovieBytes = $hdAssetsValidation.movieBytes
+    $hdAssetsValidation | Select-Object manifest, movieCount, movieBytes, subtitleSchedules, subtitleAtlases, hardwarePlaybackTest |
+        ConvertTo-Json | Set-Content -LiteralPath (Join-Path $project 'build-native-exfat/hd-movies.validation.json') -Encoding UTF8
 }
 
 $stageDataProof = Join-Path $project 'build-native-exfat/data-stage.validation.json'
@@ -201,7 +235,7 @@ $param = [ordered]@{
     conceptId = $conceptId
     contentBadgeType = 1
     contentId = "UP9000-${TitleId}_00-KHDAYSNATIVE0001"
-    contentVersion = "01.000.019"
+    contentVersion = "01.000.022"
     localizedParameters = @{
         defaultLanguage = "en-US"
         'en-US' = @{ titleName = $TitleName }
@@ -228,8 +262,10 @@ Layout is intentionally compatible with the working KH Melon Mix package:
 This is an unofficial homebrew test build. It prefers the linked RADV Vulkan
 compute renderer and VK_KHR_display VideoOut swapchain. The first console test
 must confirm WSI startup and rendering; the CPU VideoOut path remains a fallback.
-Build 019 links RADV's entire archive so Mesa's weak dispatch callbacks remain
-present. A new ELF audit rejects omitted implementations and checks the exact
+Build 022 validates the HD title layouts, atlas and animated Triangle Settings
+prompts together with the movies before packaging. It links RADV's entire archive
+so Mesa's weak dispatch callbacks remain present. The ELF audit rejects omitted
+implementations and checks the exact
 properties2 dispatch pointer that caused build 015's startup crash. Required
 Vulkan commands and startup checkpoints remain validated as in build 015.
 The first Vulkan frame may contain only the 2D package even when the display
@@ -240,16 +276,41 @@ GPU resources released during recording remain alive until that command has
 completed. Failed recording commands cannot submit as successful frames.
 The Vulkan 1.1 request matches the pinned SPIR-V 1.3 shaders. Startup command,
 dispatch and WSI checkpoints are limited to the first submissions/frames.
-The native one-screen compositor now follows the game's situation/layout data;
+The native one-screen compositor follows the game's situation/layout data;
 stacked and side-by-side compositions remain supported for scenes that require
-both screens. The HD menus/HUD and HD video options from the PC installer are
-not enabled in this native build: those PC front-end assets and MP4 playback
-still need ports.
+both screens. The HD title's Settings entry opens the native graphics menu:
+press Triangle while that entry is visible. Options remains the game's
+Start/pause button. The graphics menu controls the internal render scale
+(1x-4x), bounded supersampling, output filtering, 1080p or 4K VideoOut, and
+HD cutscenes. Output resolution is applied at next launch.
+When present, the HD cutscenes are 1280x720 MPEG-1 video with stereo 48 kHz
+MP2 audio, staged at the runtime's data/cutscenes/cinematics/hd<ID>.mpg paths;
+their copied SHA-256 values are validated before image creation. Console
+playback still requires hardware verification. This image includes $hdMovieCount
+verified HD clips ($([math]::Round($hdMovieBytes / 1GB, 2)) GiB), when the HD asset
+tree was supplied. A supplied HD tree must include the English HD title and its
+controller hints: Circle confirms, Cross goes back, and Triangle opens the
+visible title Settings entry.
+These title assets are checked against the runtime's expected layout paths and
+against their source hashes. Other HD menu/HUD screens require separate ports.
 "@
 [IO.File]::WriteAllText((Join-Path $stage "LEIA-ME-TESTE.txt"), $readme, (New-Object Text.UTF8Encoding($false)))
 
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $builder -ImagePath $image -SourceDir $stage -Label "KHDAYS3582" -ForceOverwrite
+$builderArguments = @('-ImagePath', $image, '-SourceDir', $stage, '-Label', 'KHDAYS3582', '-ForceOverwrite')
+if (-not [string]::IsNullOrWhiteSpace($ImageSize)) {
+    if ($ImageSize -notmatch '^\d+\s*[KMG]$') { throw "ImageSize must be a positive K/M/G size, for example 5G: $ImageSize" }
+    $builderArguments += @('-Size', $ImageSize)
+}
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $builder @builderArguments
 if ($LASTEXITCODE -ne 0) { throw "Native exFAT image builder failed: $LASTEXITCODE" }
+}
+
+# Recovery mode never mutates staging or the image. Validate the same runtime
+# asset contract before its existing read-only comparison of every image file.
+if ($FinalizeExistingImage -and $null -ne $hdAssets) {
+    $hdAssetsValidation = Test-StagedHdAssets
+    $hdMovieCount = $hdAssetsValidation.movieCount
+    $hdMovieBytes = $hdAssetsValidation.movieBytes
 }
 
 $stream = [IO.File]::OpenRead($image)
@@ -262,12 +323,85 @@ $sectorBytes = [int64]1 -shl $boot[108]
 $clusterBytes = $sectorBytes * ([int64]1 -shl $boot[109])
 if ($clusterBytes -ne 65536) { throw "Expected a 64 KiB exFAT cluster, got $clusterBytes" }
 
+# Do not trust Robocopy's success code alone. Read the completed volume back
+# read-only and compare every staged file, including all HD movie payloads.
+$osfMount = (Get-Command "osfmount.com" -ErrorAction SilentlyContinue).Source
+if ([string]::IsNullOrWhiteSpace($osfMount)) {
+    foreach ($candidate in @(
+        (Join-Path $env:ProgramFiles 'OSFMount\OSFMount.com'),
+        (Join-Path ${env:ProgramFiles(x86)} 'OSFMount\OSFMount.com')
+    )) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { $osfMount = $candidate; break }
+    }
+}
+if ([string]::IsNullOrWhiteSpace($osfMount)) { throw 'OSFMount CLI is required for image readback verification' }
+$usedLetters = @(Get-PSDrive -PSProvider FileSystem | ForEach-Object Name)
+$verifyDrive = $null
+foreach ($code in 68..90) {
+    $candidate = ([char]$code).ToString()
+    if ($usedLetters -notcontains $candidate) { $verifyDrive = "${candidate}:"; break }
+}
+if (-not $verifyDrive) { throw 'No free drive letter available for image readback verification' }
+$mountedForVerification = $false
+$readbackForcedDismount = $false
+$readbackFileCount = 0
+$readbackSha256Verified = 0
+try {
+    & $osfMount -a -t file -f $image -m $verifyDrive -o ro
+    if ($LASTEXITCODE -ne 0) { throw "Could not mount completed image read-only at $verifyDrive" }
+    $mountedForVerification = $true
+    $verifyRoot = "$verifyDrive\"
+    $sourceFiles = @(Get-ChildItem -LiteralPath $stage -Recurse -File -Force)
+    $imageFiles = @(Get-ChildItem -LiteralPath $verifyRoot -Recurse -File -Force)
+    if ($sourceFiles.Count -ne $imageFiles.Count) {
+        throw "Image readback file count mismatch: staged=$($sourceFiles.Count), image=$($imageFiles.Count)"
+    }
+    $sourceRelativePaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($sourceFile in $sourceFiles) {
+        $relative = $sourceFile.FullName.Substring($stage.Length + 1)
+        [void]$sourceRelativePaths.Add($relative)
+        $imageFile = Join-Path $verifyRoot $relative
+        if (-not (Test-Path -LiteralPath $imageFile -PathType Leaf)) { throw "Image readback file missing: $relative" }
+        $imageInfo = Get-Item -LiteralPath $imageFile
+        if ($sourceFile.Length -ne $imageInfo.Length) { throw "Image readback size mismatch: $relative" }
+        $sourceHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $sourceFile.FullName).Hash
+        $imageHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $imageFile).Hash
+        if ($sourceHash -ne $imageHash) { throw "Image readback SHA-256 mismatch: $relative" }
+        $readbackSha256Verified++
+        if (($readbackSha256Verified % 100) -eq 0) {
+            Write-Host "Readback SHA-256 verified: $readbackSha256Verified / $($sourceFiles.Count)"
+        }
+    }
+    foreach ($imageFile in $imageFiles) {
+        $relative = $imageFile.FullName.Substring($verifyRoot.Length)
+        if (-not $sourceRelativePaths.Contains($relative)) { throw "Unexpected file in image: $relative" }
+    }
+    $readbackFileCount = $imageFiles.Count
+} finally {
+    if ($mountedForVerification) {
+        & $osfMount -d -m $verifyDrive
+        $normalDismountExitCode = $LASTEXITCODE
+        if ($normalDismountExitCode -ne 0) {
+            # This flag is set only after our own -o ro mount succeeds. Some
+            # OSFMount versions deny normal dismount after a clean readback;
+            # force only that owned read-only volume, never an existing mount.
+            Write-Warning "Normal dismount of read-only verification volume $verifyDrive failed (exit $normalDismountExitCode); trying forced dismount"
+            & $osfMount -D -m $verifyDrive
+            if ($LASTEXITCODE -ne 0) {
+                throw "Could not dismount readback volume $verifyDrive (normal exit $normalDismountExitCode; force exit $LASTEXITCODE)"
+            }
+            $readbackForcedDismount = $true
+        }
+    }
+}
+
 $report = [ordered]@{
     image = $image
     imageBytes = (Get-Item -LiteralPath $image).Length
     sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $image).Hash
     titleId = $TitleId
     titleName = $TitleName
+    contentVersion = (Get-Content -LiteralPath (Join-Path $stage 'sce_sys/param.json') -Raw | ConvertFrom-Json).contentVersion
     ebootSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $stage "eboot.bin")).Hash
     iconSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $stage "sce_sys/icon0.png")).Hash
     backgroundSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $stage "sce_sys/pic0.png")).Hash
@@ -279,7 +413,17 @@ $report = [ordered]@{
     clusterBytes = $clusterBytes
     hardwareTest = "Pending"
     hdAssetsRoot = $hdAssets
+    hdAssetsValidation = if ($null -ne $hdAssetsValidation) { $hdStageProof } else { $null }
+    hdTitleLayouts = if ($null -ne $hdAssetsValidation) { $hdAssetsValidation.titleLayouts } else { 0 }
+    hdSettingsPromptClips = if ($null -ne $hdAssetsValidation) { $hdAssetsValidation.settingsPromptClips } else { 0 }
+    hdMovieCount = $hdMovieCount
+    hdMovieBytes = $hdMovieBytes
+    requestedImageSize = $ImageSize
+    readbackFileCount = $readbackFileCount
+    readbackSha256Verified = $readbackSha256Verified
+    readbackForcedDismount = $readbackForcedDismount
     nativeLinkValidation = $executableValidation
+    nativeLinkInputsValidation = $nativeLink.linkInputsValidation
     directSyscallInstructions = $nativeLink.directSyscallInstructions
 }
 $report | ConvertTo-Json | Set-Content -LiteralPath ($image + ".validation.json") -Encoding UTF8

@@ -13,6 +13,8 @@ typedef struct KhdaysNativeVulkanFrame {
     /* 0: normal two-screen presentation; 5: one-screen picture;
      * 6: one-display stacked; 7: one-display side-by-side. */
     unsigned output_layout;
+    /* True only when the active title layout actually exposes Settings. */
+    unsigned title_settings;
 } KhdaysNativeVulkanFrame;
 
 int khdays_native_vulkan_renderer_open(SDL_GPUDevice *device);

@@ -110,6 +110,50 @@ def adapt(relative: str, source: str) -> str:
     if relative == "runtime/input/input.c":
         # Upstream got the CRT spelling transitively on MSVC.
         source = '#include "runtime_posix.h"\n' + source
+    if relative == "runtime/movies/movie_hd.c":
+        # Native PS5 builds consume the prepared MPEG-1/MP2 cutscenes; the
+        # desktop frontend continues to use the original MP4 files. The
+        # prepared PS5 streams already contain their timed subtitle pixels, so
+        # loading the overlay atlas here would draw every caption twice.
+        for before, after in {
+            'movies/hd%s.mp4': 'movies/hd%s.mpg',
+            'data/cutscenes/cinematics/hd%s.mp4': '/app0/data/cutscenes/cinematics/hd%s.mpg',
+        }.items():
+            if before not in source:
+                raise ValueError(f"movie_hd.c no longer contains expected path: {before}")
+            source = source.replace(before, after)
+        subtitle_load = '    khdays_movie_subtitles_load(movie, khdays_language_wanted() != 0 ? khdays_language_wanted() : GetLanguage());'
+        if subtitle_load not in source:
+            raise ValueError("movie_hd.c no longer contains the expected subtitle schedule load")
+        source = source.replace(subtitle_load,
+            '    /* PS5 MPEG cutscenes have timed subtitle pixels pre-composited. */', 1)
+        # The loader does not promise /app0 as its working directory. Keep the
+        # fallback absolute, and persist movie decisions even when upstream's
+        # optional session log is disabled in a Release build.
+        source = ('#include "../../host/app/instance.h"\n#include <stdarg.h>\n'
+                  'static void khdays_ps5_movie_log(const char *format, ...);\n' +
+                  source.replace('khdays_log(', 'khdays_ps5_movie_log(') + '''
+
+static void khdays_ps5_movie_log(const char *format, ...)
+{
+    char line[1536], path[1200];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(line, sizeof(line), format, args);
+    va_end(args);
+    khdays_log("%s", line);
+    fprintf(stderr, "HD movie: %s\\n", line);
+    const char *root = khdays_host_user_folder();
+    if (root == NULL || *root == '\\0') return;
+    const int length = snprintf(path, sizeof(path), "%s/boot.log", root);
+    if (length <= 0 || (size_t)length >= sizeof(path)) return;
+    FILE *report = fopen(path, "a");
+    if (report != NULL) {
+        fprintf(report, "HD movie: %s\\n", line);
+        fclose(report);
+    }
+}
+''')
     if relative == "runtime/core/runtime.c" and "void khdays_hal_unimplemented(" in source:
         source = '#include "diag_ps5.h"\n' + source
         source = source.replace(

@@ -15,6 +15,7 @@
 extern SDL_GPUTexture *khdays_ps5_gfx_screen_raw(int engine, int *w, int *h);
 extern SDL_GPUTexture *khdays_ps5_gfx_captured_raw(int *w, int *h);
 extern SDL_GPUTexture *khdays_ps5_gfx_picture_raw(int *w, int *h);
+extern unsigned khdays_host_antialiasing(void);
 
 static SDL_GPUDevice *opened;
 static int one_screen_made;
@@ -69,6 +70,15 @@ int khdays_native_vulkan_renderer_draw(const KhdaysFramePackage *p, int scale,
      * raster; do not abort or read the absent layer/list. */
     const int has_3d = (p->wants & KHDAYS_WANT_3D) != 0;
     const int raster = has_3d && (p->info[0].is3d || khdays_gfx_render_capture_frame(p));
+    /* WANT_MOVIE can remain set after playback: kept VRAM bitmap mappings
+     * survive for later frames. Only the captured playback state should
+     * raise the composition resolution. */
+    const int movie = (p->wants & KHDAYS_WANT_MOVIE) &&
+                      (p->wants & KHDAYS_WANT_SITUATION) && p->situation.movie;
+    const unsigned aa = khdays_host_antialiasing();
+    if (aa < 1 || aa > 4 || scale * (int)aa > 8)
+        return SDL_SetError("PS5 Vulkan: render scale %d x antialiasing %u exceeds supported 8x", scale, aa);
+    int compose_scale = scale * (int)aa;
 
     const int use_one_screen = (khdays_host_graphics_flags() & KHDAYS_HOST_ONE_SCREEN) != 0;
     memset(&composition, 0, sizeof(composition));
@@ -77,6 +87,15 @@ int khdays_native_vulkan_renderer_draw(const KhdaysFramePackage *p, int scale,
         const int columns = (int)SDL_lroundf(p->list3d.widen * KHDAYS_FRAME_W);
         khdays_onescreen_prepare(p, columns > KHDAYS_FRAME_W ? columns : KHDAYS_FRAME_W,
                                  &composition, &one);
+        for (int button = 0; p->situation.title_valid &&
+                             p->situation.title_shown == KHDAYS_TITLE_SHOWN &&
+                             composition.buttons != NULL && button < composition.button_count; ++button) {
+            if (composition.buttons[button].action != NULL &&
+                strcmp(composition.buttons[button].action, "open_settings") == 0) {
+                out->title_settings = 1;
+                break;
+            }
+        }
         picture = composition.screens == KHDAYS_SCREENS_UPPER ||
                   composition.screens == KHDAYS_SCREENS_LOWER;
         if (picture && one_screen_made && !khdays_onescreen_makes_picture(p)) {
@@ -90,6 +109,26 @@ int khdays_native_vulkan_renderer_draw(const KhdaysFramePackage *p, int scale,
         }
     }
 
+    /* A decoded HD movie is a changing replacement texture, not a 3D list.
+     * Composing it at 1x discards its detail before the final scan-out blit.
+     * Five DS heights keep a 1280x720 video inside the 1280x800 movie canvas.
+     * The 1920x1080 theater atlas likewise needs at least six DS heights.
+     * Keep this separate from the gameplay scale so title/video quality does
+     * not multiply the cost of rendering every polygon-heavy game frame. */
+    if (movie && compose_scale < 5)
+        compose_scale = 5;
+    if (!raster && picture && composition.backdrop != NULL) {
+        if (compose_scale < 6) compose_scale = 6;
+        /* The theater menu is authored for 16:9. Drawing it into a DS 4:3
+         * canvas first creates black borders and loses horizontal detail. */
+        if (composition.animated && composition.picture_h > 0) {
+            int columns = (int)((int64_t)composition.picture_w * KHDAYS_FRAME_H /
+                                composition.picture_h);
+            if (columns > KHDAYS_FRAME_W && columns <= KHDAYS_FRAME_W * 3)
+                one.columns = columns;
+        }
+    }
+
     khdays_raster3d_use_list(NULL);
     khdays_raster3d_set_one_screen(picture);
     khdays_raster3d_set_hud_shapes(picture ? composition.shapes3d : NULL,
@@ -97,8 +136,11 @@ int khdays_native_vulkan_renderer_draw(const KhdaysFramePackage *p, int scale,
     khdays_raster3d_set_fine(khdays_textures_hd());
     /* As upstream: display-capture blends still need 3D although the DS's
      * display mode for this frame only shows a VRAM bank. */
-    if (raster && !khdays_raster3d_rasterize(p, scale, 0)) return 0;
-    khdays_gfx_render_set_shown(0.0f);
+    if (raster && !khdays_raster3d_rasterize(p, compose_scale, 0)) return 0;
+    /* The upstream shrink pass averages the higher-resolution image back to
+     * the selected base scale. This is real supersampling, distinct from the
+     * nearest/linear final output filter. */
+    khdays_gfx_render_set_shown(aa > 1 ? (float)scale : 0.0f);
     if (picture) {
         SDL_GPUTexture *color3d = NULL, *attr3d = NULL;
         int raster_columns = one.columns;
@@ -107,7 +149,8 @@ int khdays_native_vulkan_renderer_draw(const KhdaysFramePackage *p, int scale,
          * gpu_present.c does, instead of rejecting a valid clamped target. */
         if (raster && khdays_raster3d_targets(&color3d, &attr3d, &raster_columns))
             one.columns = raster_columns;
-        const int draw_scale = raster || composition.backdrop != NULL ? scale : 1;
+        const int draw_scale = raster || composition.backdrop != NULL ||
+                               movie ? compose_scale : 1;
         if (!khdays_gfx_render_draw_one(p, draw_scale, raster, &one)) return 0;
         one_screen_made = 1;
         out->upper = out->lower = khdays_ps5_gfx_picture_raw(&width[0], &height[0]);
@@ -118,7 +161,7 @@ int khdays_native_vulkan_renderer_draw(const KhdaysFramePackage *p, int scale,
         out->output_layout = 5;
         return 1;
     }
-    if (!khdays_gfx_render_draw(p, raster ? scale : 1, raster)) return 0;
+    if (!khdays_gfx_render_draw(p, raster || movie ? compose_scale : 1, raster)) return 0;
     engine[0] = khdays_ps5_gfx_screen_raw(0, &width[0], &height[0]);
     engine[1] = khdays_ps5_gfx_captured_raw(&width[1], &height[1]);
     if (engine[1] == NULL)

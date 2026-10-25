@@ -7,6 +7,10 @@
 #include "platform.h"
 #include "sdl_gpu_vulkan.h"
 #include "vulkan_game_renderer.h"
+#include "graphics_menu_ps5.h"
+#include "host/movies/movie_hd.h"
+#include "runtime/movies/movie_hd.h"
+#include "runtime/core/clock.h"
 
 #include <ps5platform/kernel.h>
 #include <ps5platform/videoout.h>
@@ -17,6 +21,9 @@
 #include <stdarg.h>
 #include <emmintrin.h>
 #include <stdatomic.h>
+#include <time.h>
+
+static void boot_report(const char *format, ...) __attribute__((format(printf, 1, 2)));
 
 #define FRAME_ALIGNMENT ((size_t)0x200000)
 #define MEMORY_TYPE_WC_GARLIC 3
@@ -31,8 +38,11 @@ static struct {
     int handle, registered, running, headless, vulkan;
     SDL_GPUDevice *gpu;
     KhdaysFramePackage *frame_package;
+    KhdaysNativeVulkanFrame retained_frame;
+    unsigned retained_layout;
     unsigned width, height, next;
     unsigned renderer_scale;
+    unsigned graphics_antialiasing, graphics_filter, output_mode, graphics_hd_movies;
     unsigned presents;
     unsigned diagnostic_next[3], diagnostic_scene[3], scene_events[3];
     unsigned layout, clear_pending[2];
@@ -43,6 +53,395 @@ static struct {
     int64_t physical, marker;
     unsigned char *mapping;
 } video = {.handle = -1};
+
+enum { SETTINGS_WIDTH = 960, SETTINGS_HEIGHT = 540 };
+static KhdaysPs5GraphicsMenu graphics_menu;
+static SDL_GPUTexture *settings_texture;
+static SDL_GPUTransferBuffer *settings_upload;
+static uint32_t *settings_pixels;
+static uint32_t settings_previous_buttons;
+static int settings_texture_dirty;
+static uint64_t settings_next_poll_ns;
+static int settings_draw_failed;
+static int settings_active;
+static atomic_bool title_settings_available;
+static SDL_GPUTexture *movie_texture;
+static SDL_GPUTransferBuffer *movie_upload;
+static uint8_t *movie_rgba;
+static unsigned movie_width, movie_height;
+static size_t movie_bytes;
+
+extern void khdays_ps5_host_io_settings_menu(int active);
+extern uint32_t khdays_ps5_host_io_menu_buttons(void);
+extern void khdays_ps5_host_io_pause(int pause);
+
+static uint64_t monotonic_ns(void)
+{
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0;
+    return (uint64_t)now.tv_sec * 1000000000ull + (uint64_t)now.tv_nsec;
+}
+
+static int graphics_settings_path(char *path, size_t size)
+{
+    const char *root = khdays_host_user_folder();
+    if (root == NULL || *root == '\0') return 0;
+    const int n = snprintf(path, size, "%s/graphics.ini", root);
+    return n > 0 && (size_t)n < size;
+}
+
+static void graphics_settings_load(unsigned *scale, unsigned *antialiasing,
+                                   unsigned *filter, unsigned *output, unsigned *hd_movies)
+{
+    char path[1200], key[32], value[32];
+    *scale = 2;
+    *antialiasing = 1;
+    *filter = 0;
+    *output = 0;
+    *hd_movies = 1;
+    if (graphics_settings_path(path, sizeof(path))) {
+        FILE *file = fopen(path, "r");
+        if (file != NULL) {
+            while (fscanf(file, " %31[^=]=%31s", key, value) == 2) {
+                if (strcmp(key, "scale") == 0) {
+                    const unsigned v = (unsigned)strtoul(value, NULL, 10);
+                    if (v >= 1 && v <= 4) *scale = v;
+                } else if (strcmp(key, "antialiasing") == 0) {
+                    const unsigned v = (unsigned)strtoul(value, NULL, 10);
+                    if (v >= 1 && v <= 4) *antialiasing = v;
+                } else if (strcmp(key, "filter") == 0) {
+                    if (strcmp(value, "linear") == 0) *filter = 1;
+                    else if (strcmp(value, "nearest") == 0) *filter = 0;
+                } else if (strcmp(key, "output") == 0) {
+                    if (strcmp(value, "1080p") == 0) *output = 1;
+                    else if (strcmp(value, "4k") == 0) *output = 2;
+                    else if (strcmp(value, "auto") == 0) *output = 0;
+                } else if (strcmp(key, "hd_movies") == 0) {
+                    if (strcmp(value, "1") == 0 || strcmp(value, "on") == 0) *hd_movies = 1;
+                    else if (strcmp(value, "0") == 0 || strcmp(value, "off") == 0) *hd_movies = 0;
+                }
+            }
+            fclose(file);
+        }
+    }
+    const char *scale_env = getenv("KHDAYS_PS5_3D_SCALE");
+    if (scale_env != NULL && *scale_env != '\0') {
+        char *end = NULL;
+        const unsigned long v = strtoul(scale_env, &end, 10);
+        if (end != scale_env && *end == '\0' && v >= 1 && v <= 4) *scale = (unsigned)v;
+    }
+    const char *video_env = getenv("KHDAYS_PS5_VIDEO");
+    if (video_env != NULL && *video_env != '\0') {
+        if (strcmp(video_env, "4k") == 0 || strcmp(video_env, "3840p") == 0) *output = 2;
+        else if (strcmp(video_env, "1080p") == 0) *output = 1;
+    }
+    if (*antialiasing > 8u / *scale) *antialiasing = 8u / *scale;
+    khdays_ps5_graphics_menu_init(&graphics_menu, *scale, *antialiasing, *filter, *output, *hd_movies);
+}
+
+static void graphics_settings_save(void)
+{
+    char path[1200];
+    if (!graphics_settings_path(path, sizeof(path))) return;
+    FILE *file = fopen(path, "w");
+    if (file == NULL) {
+        boot_report("settings: cannot save graphics.ini");
+        return;
+    }
+    fprintf(file, "scale=%u\nantialiasing=%u\nfilter=%s\noutput=%s\nhd_movies=%u\n",
+            graphics_menu.scale, graphics_menu.antialiasing,
+            graphics_menu.filter ? "linear" : "nearest",
+            graphics_menu.output == 2 ? "4k" : graphics_menu.output == 1 ? "1080p" : "auto",
+            graphics_menu.hd_movies);
+    fclose(file);
+}
+
+static void graphics_settings_gpu_close(void)
+{
+    if (video.gpu != NULL) {
+        if (!khdays_vk_wait_idle(video.gpu))
+            boot_report("settings: Vulkan wait before menu cleanup failed: %s", khdays_vk_error());
+        if (settings_texture != NULL) SDL_ReleaseGPUTexture(video.gpu, settings_texture);
+        if (settings_upload != NULL) SDL_ReleaseGPUTransferBuffer(video.gpu, settings_upload);
+        (void)khdays_vk_wait_idle(video.gpu);
+    }
+    settings_texture = NULL;
+    settings_upload = NULL;
+    free(settings_pixels);
+    settings_pixels = NULL;
+    settings_texture_dirty = 0;
+}
+
+static void movie_gpu_close(void)
+{
+    if (video.gpu != NULL) {
+        (void)khdays_vk_wait_idle(video.gpu);
+        if (movie_texture != NULL) SDL_ReleaseGPUTexture(video.gpu, movie_texture);
+        if (movie_upload != NULL) SDL_ReleaseGPUTransferBuffer(video.gpu, movie_upload);
+        (void)khdays_vk_wait_idle(video.gpu);
+    }
+    movie_texture = NULL;
+    movie_upload = NULL;
+    movie_width = movie_height = 0;
+    movie_bytes = 0;
+    free(movie_rgba);
+    movie_rgba = NULL;
+}
+
+static int movie_gpu_open(unsigned width, unsigned height)
+{
+    if (movie_texture != NULL && movie_width == width && movie_height == height) return 1;
+    movie_gpu_close();
+    if (video.gpu == NULL || width == 0 || height == 0 ||
+        (size_t)width > SIZE_MAX / 4u / height) return 0;
+    const size_t bytes = (size_t)width * height * 4u;
+    if (bytes > UINT32_MAX) return 0;
+    movie_rgba = malloc(bytes);
+    SDL_GPUTextureCreateInfo texture_info = {
+        .type = SDL_GPU_TEXTURETYPE_2D,
+        .format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+        .usage = SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE,
+        .width = width, .height = height, .layer_count_or_depth = 1,
+        .num_levels = 1, .sample_count = SDL_GPU_SAMPLECOUNT_1,
+    };
+    SDL_GPUTransferBufferCreateInfo transfer_info = {
+        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = (Uint32)bytes,
+    };
+    if (movie_rgba == NULL) return 0;
+    movie_texture = SDL_CreateGPUTexture(video.gpu, &texture_info);
+    movie_upload = SDL_CreateGPUTransferBuffer(video.gpu, &transfer_info);
+    if (movie_texture == NULL || movie_upload == NULL) {
+        movie_gpu_close();
+        return 0;
+    }
+    movie_width = width;
+    movie_height = height;
+    movie_bytes = bytes;
+    return 1;
+}
+
+static uint8_t clamp_byte(int value)
+{
+    if (value < 0) return 0;
+    if (value > 255) return 255;
+    return (uint8_t)value;
+}
+
+/* Turn the decoder's NV12 planes into the RGBA8 texture used by the Vulkan
+ * presenter. pl_mpeg's source conversion uses the same limited-range BT.601
+ * matrix; keeping that matrix here makes the CPU and PS5 preview agree. */
+static int movie_present_frame(void)
+{
+    KhdaysHdPicture picture;
+    if (!khdays_hd_picture_begin(&picture)) return 0;
+    int success = 0;
+    if (picture.luma == NULL || picture.chroma == NULL || picture.width < 2 || picture.height < 2 ||
+        picture.pitch < picture.width || !movie_gpu_open((unsigned)picture.width, (unsigned)picture.height)) {
+        boot_report("HD movie: invalid frame or Vulkan upload allocation failed");
+        goto done;
+    }
+    const int w = picture.width, h = picture.height, pitch = picture.pitch;
+    for (int y = 0; y < h; ++y) {
+        const uint8_t *luma = picture.luma + (size_t)y * pitch;
+        const uint8_t *chroma = picture.chroma + (size_t)(y / 2) * pitch;
+        uint8_t *out = movie_rgba + (size_t)y * (size_t)w * 4u;
+        for (int x = 0; x < w; ++x) {
+            const int c = (int)luma[x] - 16;
+            const int d = (int)chroma[x & ~1] - 128;
+            const int e = (int)chroma[(x & ~1) + 1] - 128;
+            const int yy = 298 * c;
+            out[4 * x] = clamp_byte((yy + 409 * e + 128) >> 8);
+            out[4 * x + 1] = clamp_byte((yy - 100 * d - 208 * e + 128) >> 8);
+            out[4 * x + 2] = clamp_byte((yy + 516 * d + 128) >> 8);
+            out[4 * x + 3] = 255;
+        }
+    }
+    /* The staged PS5 MPEG cutscenes already include their timed subtitle
+     * pixels; compositing the separate schedule again would double the text. */
+    void *mapped = SDL_MapGPUTransferBuffer(video.gpu, movie_upload, false);
+    if (mapped == NULL) goto done;
+    memcpy(mapped, movie_rgba, movie_bytes);
+    SDL_UnmapGPUTransferBuffer(video.gpu, movie_upload);
+    SDL_GPUCommandBuffer *command = SDL_AcquireGPUCommandBuffer(video.gpu);
+    if (command == NULL) goto done;
+    SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(command);
+    if (copy == NULL) {
+        (void)SDL_CancelGPUCommandBuffer(command);
+        goto done;
+    }
+    const SDL_GPUTextureTransferInfo source = {
+        .transfer_buffer = movie_upload, .offset = 0,
+        .pixels_per_row = movie_width, .rows_per_layer = movie_height,
+    };
+    const SDL_GPUTextureRegion destination = {
+        .texture = movie_texture, .mip_level = 0, .layer = 0,
+        .x = 0, .y = 0, .z = 0, .w = movie_width, .h = movie_height, .d = 1,
+    };
+    SDL_UploadToGPUTexture(copy, &source, &destination, false);
+    SDL_EndGPUCopyPass(copy);
+    if (!SDL_SubmitGPUCommandBuffer(command)) goto done;
+    if (!khdays_vk_present(video.gpu, movie_texture, movie_texture, 5)) goto done;
+    ++video.presents;
+    success = 1;
+done:
+    khdays_hd_picture_done();
+    return success;
+}
+
+static int graphics_settings_gpu_open(void)
+{
+    if (settings_texture != NULL) return 1;
+    if (video.gpu == NULL) return 0;
+    const size_t bytes = (size_t)SETTINGS_WIDTH * SETTINGS_HEIGHT * sizeof(uint32_t);
+    settings_pixels = calloc((size_t)SETTINGS_WIDTH * SETTINGS_HEIGHT, sizeof(uint32_t));
+    SDL_GPUTextureCreateInfo texture_info = {
+        .type = SDL_GPU_TEXTURETYPE_2D,
+        .format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+        .usage = SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE,
+        .width = SETTINGS_WIDTH, .height = SETTINGS_HEIGHT, .layer_count_or_depth = 1,
+        .num_levels = 1, .sample_count = SDL_GPU_SAMPLECOUNT_1,
+    };
+    SDL_GPUTransferBufferCreateInfo transfer_info = {
+        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = (Uint32)bytes,
+    };
+    if (settings_pixels == NULL) return 0;
+    settings_texture = SDL_CreateGPUTexture(video.gpu, &texture_info);
+    settings_upload = SDL_CreateGPUTransferBuffer(video.gpu, &transfer_info);
+    if (settings_texture == NULL || settings_upload == NULL) {
+        graphics_settings_gpu_close();
+        return 0;
+    }
+    settings_texture_dirty = 1;
+    return 1;
+}
+
+static int graphics_settings_present(void)
+{
+    if (!graphics_settings_gpu_open()) return 0;
+    khdays_ps5_graphics_menu_draw(&graphics_menu, settings_pixels, SETTINGS_WIDTH, SETTINGS_HEIGHT);
+    void *mapped = SDL_MapGPUTransferBuffer(video.gpu, settings_upload, false);
+    if (mapped == NULL) return 0;
+    memcpy(mapped, settings_pixels, (size_t)SETTINGS_WIDTH * SETTINGS_HEIGHT * sizeof(uint32_t));
+    SDL_UnmapGPUTransferBuffer(video.gpu, settings_upload);
+    SDL_GPUCommandBuffer *command = SDL_AcquireGPUCommandBuffer(video.gpu);
+    if (command == NULL) return 0;
+    SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(command);
+    if (copy == NULL) { SDL_CancelGPUCommandBuffer(command); return 0; }
+    const SDL_GPUTextureTransferInfo source = {
+        .transfer_buffer = settings_upload, .offset = 0,
+        .pixels_per_row = SETTINGS_WIDTH, .rows_per_layer = SETTINGS_HEIGHT,
+    };
+    const SDL_GPUTextureRegion destination = {
+        .texture = settings_texture, .mip_level = 0, .layer = 0,
+        .x = 0, .y = 0, .z = 0, .w = SETTINGS_WIDTH, .h = SETTINGS_HEIGHT, .d = 1,
+    };
+    SDL_UploadToGPUTexture(copy, &source, &destination, false);
+    SDL_EndGPUCopyPass(copy);
+    if (!SDL_SubmitGPUCommandBuffer(command) || !khdays_vk_wait_idle(video.gpu)) return 0;
+    if (!khdays_vk_present(video.gpu, settings_texture, settings_texture, 5)) return 0;
+    ++video.presents;
+    settings_texture_dirty = 0;
+    return 1;
+}
+
+static void graphics_settings_close(void)
+{
+    if (!settings_active) return;
+    settings_active = 0;
+    graphics_menu.open = 0;
+    khdays_hd_pause(0);
+    khdays_ps5_host_io_settings_menu(0);
+    /* Identical title frames can be skipped indefinitely by the runtime.
+     * Restore its retained GPU image before releasing the game's clock. */
+    if (video.retained_frame.upper != NULL && video.retained_frame.lower != NULL &&
+        !khdays_vk_present(video.gpu, video.retained_frame.upper,
+                          video.retained_frame.lower, video.retained_layout))
+        boot_report("ERROR restoring title after Settings: %s", khdays_vk_error());
+    khdays_ps5_host_io_pause(0);
+    khdays_clock_hold(KHDAYS_HOLD_SETTINGS, 0);
+    settings_texture_dirty = 0;
+    boot_report("settings: graphics menu closed; scale=%ux aa=%ux filter=%s output=%s",
+                video.renderer_scale, video.graphics_antialiasing,
+                graphics_menu.filter ? "linear" : "nearest",
+                graphics_menu.output == 2 ? "4k (restart required)" :
+                graphics_menu.output == 1 ? "1080p (restart required)" : "auto");
+}
+
+static void title_settings_set_available(int available)
+{
+    const int was_available = atomic_exchange(&title_settings_available, available != 0);
+    khdays_ps5_host_io_title_settings(available);
+    if (was_available != (available != 0)) {
+        boot_report("title: HD Settings button %s; Triangle opens settings, Options remains game Start",
+                    available ? "visible" : "hidden");
+    }
+}
+
+void khdays_ps5_video_settings_tick(void)
+{
+    if (!video.vulkan) return;
+    const uint64_t now = monotonic_ns();
+    if (settings_next_poll_ns != 0 && now < settings_next_poll_ns) return;
+    settings_next_poll_ns = now + 16000000ull;
+    const uint32_t buttons = khdays_ps5_host_io_menu_buttons();
+    khdays_movie_hd_poll();
+    if (khdays_movie_hd_showing()) title_settings_set_available(0);
+    const int triangle_pressed = (buttons & KHDAYS_PS5_MENU_TRIANGLE) != 0 &&
+                                !(settings_previous_buttons & KHDAYS_PS5_MENU_TRIANGLE);
+    if (!graphics_menu.open && atomic_load(&title_settings_available) && triangle_pressed) {
+        khdays_ps5_graphics_menu_open(&graphics_menu);
+        graphics_menu.previous_buttons = buttons;
+        settings_active = 1;
+        settings_draw_failed = 0;
+        khdays_ps5_host_io_settings_menu(1);
+        khdays_ps5_host_io_pause(1);
+        khdays_hd_pause(1);
+        khdays_clock_hold(KHDAYS_HOLD_SETTINGS, 1);
+        settings_texture_dirty = 1;
+        boot_report("settings: opened from the HD title Settings button (DualSense Triangle)");
+    } else if (graphics_menu.open) {
+        const unsigned old_selected = graphics_menu.selected;
+        const unsigned changes = khdays_ps5_graphics_menu_handle(&graphics_menu, buttons);
+        if (changes & KHDAYS_PS5_GRAPHICS_CLOSE) {
+            graphics_settings_save();
+            graphics_settings_close();
+        } else {
+            if (changes & KHDAYS_PS5_GRAPHICS_SCALE) {
+                video.renderer_scale = graphics_menu.scale;
+                settings_texture_dirty = 1;
+            }
+            if (changes & KHDAYS_PS5_GRAPHICS_AA) {
+                video.graphics_antialiasing = graphics_menu.antialiasing;
+                settings_texture_dirty = 1;
+            }
+            if (changes & KHDAYS_PS5_GRAPHICS_FILTER) {
+                video.graphics_filter = graphics_menu.filter;
+                khdays_vk_set_filter(video.graphics_filter);
+                settings_texture_dirty = 1;
+            }
+            if (changes & KHDAYS_PS5_GRAPHICS_OUTPUT) settings_texture_dirty = 1;
+            if (changes & KHDAYS_PS5_GRAPHICS_MOVIES) {
+                video.graphics_hd_movies = graphics_menu.hd_movies;
+                settings_texture_dirty = 1;
+            }
+            if (old_selected != graphics_menu.selected) settings_texture_dirty = 1;
+            if (changes != 0) graphics_settings_save();
+        }
+    }
+    settings_previous_buttons = buttons;
+    if (graphics_menu.open && settings_texture_dirty && !graphics_settings_present()) {
+        if (!settings_draw_failed)
+            boot_report("ERROR: could not draw PS5 graphics settings: %s", SDL_GetError());
+        settings_draw_failed = 1;
+        graphics_settings_close();
+    }
+    if (!settings_active) {
+        khdays_movie_hd_host_buttons(khdays_host_buttons());
+        if (khdays_movie_hd_showing()) (void)movie_present_frame();
+    }
+}
 
 /* Invert the swizzle once, then write each 64 KiB tile sequentially. This
  * avoids millions of per-frame divisions/XORs and scattered WC stores. */
@@ -55,8 +454,6 @@ static struct {
 static const char *const layout_names[] = {"upper", "lower", "upper-fit", "lower-fit", "stacked"};
 static atomic_bool layout_requested;
 
-static void boot_report(const char *format, ...) __attribute__((format(printf, 1, 2)));
-
 static void vulkan_log(const char *message)
 {
     boot_report("Vulkan: %s", message != NULL ? message : "(sem mensagem)");
@@ -64,6 +461,7 @@ static void vulkan_log(const char *message)
 
 static void vulkan_close(void)
 {
+    title_settings_set_available(0);
     if (video.gpu != NULL && !khdays_vk_wait_idle(video.gpu))
         boot_report("ERROR waiting for Vulkan shutdown: %s", khdays_vk_error());
     khdays_native_vulkan_renderer_close();
@@ -71,6 +469,7 @@ static void vulkan_close(void)
     free(video.frame_package);
     video.frame_package = NULL;
     video.gpu = NULL;
+    memset(&video.retained_frame, 0, sizeof(video.retained_frame));
     video.vulkan = 0;
 }
 
@@ -374,6 +773,9 @@ static int wait_marker(int64_t marker)
 
 void khdays_host_close(void)
 {
+    graphics_settings_close();
+    graphics_settings_gpu_close();
+    movie_gpu_close();
     khdays_ps5_host_io_shutdown();
     if (video.vulkan || video.gpu != NULL || video.frame_package != NULL)
         vulkan_close();
@@ -400,7 +802,6 @@ void khdays_host_close(void)
 
 int khdays_host_start(void)
 {
-    const char *resolution = getenv("KHDAYS_PS5_VIDEO");
     if (video.running) return 1;
     if (video.mapping) {
         fprintf(stderr, "host video: previous scan-out memory still retained\n");
@@ -422,24 +823,28 @@ int khdays_host_start(void)
      * 3840x2160 path.  This is an output-size choice only; it does not change
      * the game's 256x192 DS render target or emulate the game at 4x speed.
      */
-    const int output_4k = resolution &&
-        (!strcmp(resolution, "4k") || !strcmp(resolution, "3840p"));
+    unsigned saved_scale, saved_antialiasing, saved_filter, saved_output, saved_hd_movies;
+    graphics_settings_load(&saved_scale, &saved_antialiasing, &saved_filter, &saved_output, &saved_hd_movies);
+    video.renderer_scale = saved_scale;
+    video.graphics_antialiasing = saved_antialiasing;
+    video.graphics_filter = saved_filter;
+    video.output_mode = saved_output;
+    video.graphics_hd_movies = saved_hd_movies;
+    khdays_vk_set_filter(video.graphics_filter);
+    settings_previous_buttons = 0;
+    settings_next_poll_ns = 0;
+    settings_draw_failed = 0;
+    const int output_4k = video.output_mode == 2;
     video.width = output_4k ? 3840 : 1920;
     video.height = video.width == 3840 ? 2160 : 1080;
     video.presents = 0;
     memset(video.diagnostic_next, 0, sizeof(video.diagnostic_next));
     memset(video.diagnostic_scene, 0xff, sizeof(video.diagnostic_scene));
     memset(video.scene_events, 0, sizeof(video.scene_events));
-    const char *scale_env = getenv("KHDAYS_PS5_3D_SCALE");
-    video.renderer_scale = 2;
-    if (scale_env != NULL && *scale_env != '\0') {
-        char *end = NULL;
-        const unsigned long requested = strtoul(scale_env, &end, 10);
-        if (end != scale_env && *end == '\0' && requested >= 1 && requested <= 4)
-            video.renderer_scale = (unsigned)requested;
-    }
-    boot_report("BUILD 01.000.019; Vulkan 1.1; deferred GPU resource release; one-screen compositor enabled; 1080p default; 3D scale=%ux",
-                video.renderer_scale);
+    boot_report("BUILD 01.000.022; Vulkan; HD title Settings via Triangle; output=%s; gameplay 3D scale=%ux aa=%ux filter=%s",
+                video.output_mode == 2 ? "4K" : "1080p", video.renderer_scale,
+                video.graphics_antialiasing,
+                video.graphics_filter ? "linear" : "nearest");
     video.started_tsc = sceKernelReadTsc();
     video.tsc_hz = sceKernelGetTscFrequency();
     boot_report("BOOT timing ready; counter_hz=%llu", (unsigned long long)video.tsc_hz);
@@ -620,29 +1025,44 @@ int khdays_host_frame_wants(void)
 }
 float khdays_host_frame_widen(void) { return 1.0f; }
 int khdays_host_frame_scale(void) { return video.vulkan ? (int)video.renderer_scale : 1; }
+unsigned khdays_host_antialiasing(void)
+{
+    return video.vulkan ? video.graphics_antialiasing : 1u;
+}
 int khdays_host_graphics_flags(void)
 {
     /* Ask the upstream game/UI logic for its native one-screen compositions
      * only when the GPU package renderer is active. The reference CPU fallback
      * still presents the two original DS screens. */
-    return video.vulkan ? KHDAYS_HOST_ONE_SCREEN : 0;
+    return video.vulkan ? KHDAYS_HOST_ONE_SCREEN | KHDAYS_HOST_HD_GRAPHICS |
+                          (video.graphics_hd_movies ? KHDAYS_HOST_MOVIES_HD : 0) : 0;
 }
 KhdaysFramePackage *khdays_host_frame_begin(void) { return video.vulkan ? video.frame_package : NULL; }
 void khdays_host_frame_publish(KhdaysFramePackage *p)
 {
     if (video.vulkan) {
         KhdaysNativeVulkanFrame frame;
+        /* Retire the title action before polling the first package from a
+         * different screen, even if the previous rendered image had its bar. */
+        if (p != NULL && (p->wants & KHDAYS_WANT_SITUATION) && p->situation.taken &&
+            (!p->situation.title_valid || p->situation.title_shown != KHDAYS_TITLE_SHOWN))
+            title_settings_set_available(0);
         khdays_ps5_host_io_poll();
+        khdays_ps5_video_settings_tick();
+        if (settings_active || khdays_movie_hd_showing()) return;
         apply_layout_request();
         if (!khdays_native_vulkan_renderer_draw(p, (int)video.renderer_scale, &frame)) {
             boot_report("ERROR Vulkan frame render failed: %s", SDL_GetError());
             abort();
         }
+        title_settings_set_available(frame.title_settings != 0);
         const unsigned present_layout = frame.output_layout != 0 ? frame.output_layout : video.layout;
         if (!khdays_vk_present(video.gpu, frame.upper, frame.lower, present_layout)) {
             boot_report("ERROR Vulkan VideoOut present failed: %s", khdays_vk_error());
             abort();
         }
+        video.retained_frame = frame;
+        video.retained_layout = present_layout;
         ++video.presents;
         if (diagnostic_frame(video.presents)) {
             boot_report("VULKAN package accepted: frame=%u wants=0x%02x upper=%u display3d=%u payload3d=%u",

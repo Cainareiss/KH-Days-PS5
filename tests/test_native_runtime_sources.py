@@ -53,6 +53,16 @@ def host_environment() -> dict[str, str]:
 
 
 class RuntimePreparation(unittest.TestCase):
+    def test_ps5_hd_movie_paths_use_mpeg_without_double_subtitle_compositing(self) -> None:
+        source = r'''snprintf(relative, sizeof(relative), "movies/hd%s.mp4", movie);
+snprintf(file, sizeof(file), "data/cutscenes/cinematics/hd%s.mp4", movie);
+    khdays_movie_subtitles_load(movie, khdays_language_wanted() != 0 ? khdays_language_wanted() : GetLanguage());'''
+        adapted = ADAPTER.adapt("runtime/movies/movie_hd.c", source)
+        self.assertIn('movies/hd%s.mpg', adapted)
+        self.assertIn('"/app0/data/cutscenes/cinematics/hd%s.mpg"', adapted)
+        self.assertIn('pre-composited', adapted)
+        self.assertNotIn('khdays_movie_subtitles_load(', adapted)
+
     def test_input_layout_chord_preserves_other_controls_and_audio(self) -> None:
         port = ROOT / ".cache/khdays-native-v0.1.1/port"
         clang = ROOT / "toolchains/llvm-23.1.3/clang+llvm-23.1.3-x86_64-pc-windows-msvc/bin/clang.exe"
@@ -152,8 +162,10 @@ class RuntimePreparation(unittest.TestCase):
             command = [str(clang), "--target=x86_64-pc-windows-msvc", "-std=c17", "-fdeclspec",
                        "-I", str(folder), "-I", str(ROOT / "tests/native_memory_stubs"),
                        "-I", str(port), "-I", str(port / "host/app"),
+                       "-I", str(ROOT / "native/ps5/vulkan_compat"),
                        "-I", str(ROOT / "toolchains/sources/PS5_VulkanTemplate/ps5/src"),
                        str(ROOT / "tests/native_ps5_video_test.c"),
+                       str(ROOT / "native/ps5/graphics_menu_ps5.c"),
                        str(port / "gpu/vram_map.c"), "-o", str(binary)]
             environment = host_environment()
             built = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=180)

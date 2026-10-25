@@ -1,5 +1,33 @@
 # Fluxo exFAT nativo (WIP)
 
+## Build 022 de 25/10/2026
+
+A build atual para teste está em
+`build-native-exfat/dist/PPSA35820-native-hd-title-022.exfat`.
+Ela inclui a tela inicial HD, os 14 layouts de título em inglês, o menu gráfico
+nativo, a ROM europeia YKGP e os 38 vídeos HD convertidos (1280x720 MPEG-1 com
+áudio MP2 estéreo). Triângulo abre as configurações pela barra da tela inicial;
+Options mantém o Start/pausa do jogo. O tamanho foi fixado em
+`4095M`; não use o nome antigo `5G` como indicação do tamanho real.
+
+A verificação de retorno montou a imagem em somente leitura: os 2.057 arquivos
+foram comparados por SHA-256 com o staging, sem divergências. O `chkdsk` também
+terminou sem erros. O relatório está ao lado da imagem, com tamanho, hashes e
+`hardwareTest: Pending`. Isso confirma a integridade do pacote no PC, não a
+reprodução no PS5; ainda é necessário testar o jogo e as cutscenes no console.
+
+Desmonte a imagem anterior antes de montar esta versão do mesmo `PPSA35820`.
+O `boot.log` deve identificar `BUILD 01.000.022`. As causas e os testes desta
+correção estão em `docs/BUILD-022-HD-TITLE-FIX.md`.
+
+Para reconstruir com o staging já preparado, use `-ReuseStage`, informe
+`-ImageSize 4095M`, `-HdAssetsRoot` e `-ImageBuilder`. O script agora faz
+readback e SHA-256 de todos os arquivos depois de criar o exFAT e aborta se
+encontrar arquivo ausente, tamanho diferente ou hash divergente.
+
+> As instruções de planejamento abaixo foram escritas antes desta build e não
+> representam o estado atual; use o comando e o relatório da build validada.
+
 Atualizacao 21/10/2026: a imagem de teste fica somente na máquina local. O
 empacotador valida
 o manifesto da extracao nativa completa antes de tocar no staging. Um caminho

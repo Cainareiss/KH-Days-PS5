@@ -6,11 +6,24 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+
+#ifndef CLOCK_MONOTONIC
+#define CLOCK_MONOTONIC 1
+#endif
+static int test_clock_gettime(int clock_id, struct timespec *now);
+#define clock_gettime test_clock_gettime
 
 static const char *test_resolution;
 static const char *test_layout = "stacked";
 static const char *test_log_root;
 static int test_headless;
+static uint64_t test_now_ns;
+static uint32_t test_menu_buttons;
+static unsigned test_settings_opens;
+static int test_title_settings;
+static unsigned test_gpu_restores;
+static void *test_restored_upper;
 static jmp_buf test_abort_target;
 static char *test_getenv(const char *name)
 {
@@ -25,6 +38,75 @@ static _Noreturn void test_abort(void) { longjmp(test_abort_target, 1); }
 #include "../native/ps5/host_video_ps5.c"
 #undef getenv
 #undef abort
+#undef clock_gettime
+
+static int test_clock_gettime(int clock_id, struct timespec *now)
+{
+    assert(clock_id == CLOCK_MONOTONIC && now != NULL);
+    now->tv_sec = (time_t)(test_now_ns / 1000000000ull);
+    now->tv_nsec = (long)(test_now_ns % 1000000000ull);
+    return 0;
+}
+
+/* This host-only VideoOut test never opens Vulkan or plays a movie. Keep the
+ * production host_video unit linkable while its native GPU/movie paths are
+ * exercised by their own PS5 compile and decoder tests. */
+void khdays_ps5_host_io_settings_menu(int active) { if (active) ++test_settings_opens; }
+void khdays_ps5_host_io_title_settings(int available) { test_title_settings = available; }
+uint32_t khdays_ps5_host_io_menu_buttons(void) { return test_menu_buttons; }
+void khdays_ps5_host_io_pause(int pause) { (void)pause; }
+uint16_t khdays_host_buttons(void) { return 0; }
+void khdays_movie_hd_poll(void) { }
+void khdays_movie_hd_host_buttons(uint16_t buttons) { (void)buttons; }
+int khdays_movie_hd_showing(void) { return 0; }
+void khdays_hd_pause(int pause) { (void)pause; }
+int khdays_hd_picture_begin(KhdaysHdPicture *picture) { (void)picture; return 0; }
+void khdays_hd_picture_done(void) { }
+void khdays_clock_hold(unsigned reason, int on) { (void)reason; (void)on; }
+
+SDL_GPUDevice *khdays_vk_device_open(unsigned width, unsigned height, void (*log)(const char *))
+{ (void)width; (void)height; (void)log; return NULL; }
+bool khdays_vk_wait_idle(SDL_GPUDevice *device) { (void)device; return true; }
+void khdays_vk_device_close(SDL_GPUDevice *device) { (void)device; }
+bool khdays_vk_present(SDL_GPUDevice *device, SDL_GPUTexture *upper, SDL_GPUTexture *lower, unsigned layout)
+{
+    (void)device; (void)lower; (void)layout;
+    ++test_gpu_restores;
+    test_restored_upper = upper;
+    return true;
+}
+void khdays_vk_set_filter(unsigned linear) { (void)linear; }
+unsigned khdays_vk_width(SDL_GPUDevice *device) { (void)device; return 0; }
+unsigned khdays_vk_height(SDL_GPUDevice *device) { (void)device; return 0; }
+const char *khdays_vk_error(void) { return "unused Vulkan test stub"; }
+int khdays_native_vulkan_renderer_open(SDL_GPUDevice *device) { (void)device; return 0; }
+void khdays_native_vulkan_renderer_close(void) { }
+int khdays_native_vulkan_renderer_draw(const KhdaysFramePackage *package, int scale,
+                                       KhdaysNativeVulkanFrame *out)
+{ (void)package; (void)scale; (void)out; return 0; }
+
+const char *SDL_GetError(void) { return "unused SDL GPU test stub"; }
+SDL_GPUTexture *SDL_CreateGPUTexture(SDL_GPUDevice *device, const SDL_GPUTextureCreateInfo *info)
+{ (void)device; (void)info; return NULL; }
+void SDL_ReleaseGPUTexture(SDL_GPUDevice *device, SDL_GPUTexture *texture)
+{ (void)device; (void)texture; }
+SDL_GPUTransferBuffer *SDL_CreateGPUTransferBuffer(SDL_GPUDevice *device,
+                                                   const SDL_GPUTransferBufferCreateInfo *info)
+{ (void)device; (void)info; return NULL; }
+void SDL_ReleaseGPUTransferBuffer(SDL_GPUDevice *device, SDL_GPUTransferBuffer *buffer)
+{ (void)device; (void)buffer; }
+void *SDL_MapGPUTransferBuffer(SDL_GPUDevice *device, SDL_GPUTransferBuffer *buffer, bool cycle)
+{ (void)device; (void)buffer; (void)cycle; return NULL; }
+void SDL_UnmapGPUTransferBuffer(SDL_GPUDevice *device, SDL_GPUTransferBuffer *buffer)
+{ (void)device; (void)buffer; }
+SDL_GPUCommandBuffer *SDL_AcquireGPUCommandBuffer(SDL_GPUDevice *device) { (void)device; return NULL; }
+SDL_GPUCopyPass *SDL_BeginGPUCopyPass(SDL_GPUCommandBuffer *command) { (void)command; return NULL; }
+void SDL_EndGPUCopyPass(SDL_GPUCopyPass *pass) { (void)pass; }
+bool SDL_CancelGPUCommandBuffer(SDL_GPUCommandBuffer *command) { (void)command; return false; }
+bool SDL_SubmitGPUCommandBuffer(SDL_GPUCommandBuffer *command) { (void)command; return false; }
+void SDL_UploadToGPUTexture(SDL_GPUCopyPass *pass, const SDL_GPUTextureTransferInfo *source,
+                            const SDL_GPUTextureRegion *destination, bool cycle)
+{ (void)pass; (void)source; (void)destination; (void)cycle; }
 
 static int opens, closes, allocations, releases, unmaps, registers, unregisters;
 static int io_starts, io_stops, polls, submits, vblanks;
@@ -401,6 +483,51 @@ static void test_bounded_diagnostics(const char *directory)
     assert(!diagnostic_take(1800, 0, &checkpoint));
 }
 
+static void title_settings_tick(uint32_t buttons)
+{
+    test_menu_buttons = buttons;
+    test_now_ns += 16000000ull;
+    khdays_ps5_video_settings_tick();
+}
+
+static void test_title_settings_entry(void)
+{
+    video.vulkan = 1;
+    video.retained_frame.upper = (SDL_GPUTexture *)(uintptr_t)1;
+    video.retained_frame.lower = (SDL_GPUTexture *)(uintptr_t)2;
+    video.retained_layout = 5;
+    test_gpu_restores = 0;
+    khdays_ps5_graphics_menu_init(&graphics_menu, 2, 1, 0, 0, 1);
+    settings_previous_buttons = 0;
+    settings_next_poll_ns = 0;
+    test_settings_opens = 0;
+    title_settings_set_available(0);
+    title_settings_tick(KHDAYS_PS5_MENU_OPTIONS);
+    title_settings_tick(0);
+    title_settings_tick(KHDAYS_PS5_MENU_TRIANGLE);
+    assert(test_settings_opens == 0);
+    title_settings_set_available(1);
+    assert(test_title_settings == 1);
+    title_settings_tick(0);
+    title_settings_tick(KHDAYS_PS5_MENU_OPTIONS);
+    assert(test_settings_opens == 0); /* Start is never a Settings opener. */
+    title_settings_tick(KHDAYS_PS5_MENU_TRIANGLE);
+    assert(test_settings_opens == 1);
+    /* GPU creation is intentionally unavailable in this host test: the menu
+     * closes after that attempted draw, but a held button must not reopen it. */
+    assert(!settings_active);
+    assert(test_gpu_restores == 1 && test_restored_upper == video.retained_frame.upper);
+    title_settings_tick(KHDAYS_PS5_MENU_TRIANGLE);
+    assert(test_settings_opens == 1);
+    title_settings_set_available(0);
+    title_settings_tick(0);
+    title_settings_tick(KHDAYS_PS5_MENU_TRIANGLE);
+    assert(test_settings_opens == 1 && test_title_settings == 0);
+    video.vulkan = 0;
+    memset(&video.retained_frame, 0, sizeof(video.retained_frame));
+    test_menu_buttons = settings_previous_buttons = 0;
+}
+
 int main(int argc, char **argv)
 {
     test_present();
@@ -412,6 +539,7 @@ int main(int argc, char **argv)
     test_headless = 0;
     test_layout_preference(argv[1]);
     test_bounded_diagnostics(argv[1]);
+    test_title_settings_entry();
     puts("native PS5 video: PASS (tile bounds, screen pixels, lifecycle, failures, bounded diagnostics)");
     return 0;
 }

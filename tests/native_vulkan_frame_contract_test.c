@@ -19,6 +19,10 @@ static int raster_calls, draw_calls, one_calls, target_calls;
 static int last_scale, last_raster, last_columns;
 static int one_screen, screens, makes_picture, capture_frame, captured;
 static int raster_columns;
+static int backdrop;
+static unsigned antialiasing = 1;
+static const char *settings_action;
+static KhdaysButton title_button;
 
 #define CHECK(x) do { if (!(x)) { \
     fprintf(stderr, "line %d: %s (%s)\n", __LINE__, #x, last_error); return 1; \
@@ -44,6 +48,7 @@ void khdays_raster3d_set_hud_shapes(const KhdaysShape3d *shapes, int count)
 void khdays_raster3d_set_fine(int on) { (void)on; }
 int khdays_textures_hd(void) { return 0; }
 int khdays_host_graphics_flags(void) { return one_screen ? KHDAYS_HOST_ONE_SCREEN : 0; }
+unsigned khdays_host_antialiasing(void) { return antialiasing; }
 int khdays_gfx_render_capture_frame(const KhdaysFramePackage *p)
 { (void)p; return capture_frame; }
 int khdays_raster3d_rasterize(const KhdaysFramePackage *p, int scale, int smooth)
@@ -77,6 +82,13 @@ void khdays_onescreen_prepare(const KhdaysFramePackage *p, int columns,
 {
     (void)p;
     composition->screens = screens;
+    composition->backdrop = backdrop ? (const uint8_t *)&picture_token : NULL;
+    composition->animated = backdrop;
+    composition->picture_w = 1920;
+    composition->picture_h = 1080;
+    title_button.action = settings_action;
+    composition->buttons = settings_action ? &title_button : NULL;
+    composition->button_count = settings_action ? 1 : 0;
     draw->columns = columns;
 }
 int khdays_onescreen_makes_picture(const KhdaysFramePackage *p)
@@ -106,11 +118,13 @@ static void reset(void)
     package.frame = 1;
     raster_calls = draw_calls = one_calls = target_calls = 0;
     last_scale = last_raster = last_columns = 0;
-    one_screen = capture_frame = captured = 0;
+    one_screen = capture_frame = captured = backdrop = 0;
     screens = KHDAYS_SCREENS_UPPER;
     makes_picture = 1;
     raster_columns = 256;
     last_error[0] = '\0';
+    settings_action = NULL;
+    antialiasing = 1;
     khdays_native_vulkan_renderer_open((SDL_GPUDevice *)&device_token);
 }
 
@@ -127,6 +141,7 @@ int main(void)
     CHECK(raster_calls == 0 && draw_calls == 1 && last_raster == 0 && last_scale == 1);
     CHECK(out.upper == (SDL_GPUTexture *)&screen_token[0]);
     CHECK(out.lower == (SDL_GPUTexture *)&screen_token[1]);
+    CHECK(!out.title_settings);
     CHECK(out.upper_width == 256 && out.upper_height == 192 && out.frame == 1);
 
     /* The following package supplies the 3D list and uses the requested scale. */
@@ -185,6 +200,52 @@ int main(void)
     screens = KHDAYS_SCREENS_STACKED;
     CHECK(khdays_native_vulkan_renderer_draw(&package, 2, &out));
     CHECK(out.output_layout == 6);
+
+    /* Theater title art must survive the composition at HD dimensions,
+     * independently of the cheaper gameplay scale. */
+    reset();
+    one_screen = backdrop = 1;
+    package.situation.title_valid = 1;
+    package.situation.title_shown = KHDAYS_TITLE_SHOWN;
+    settings_action = "open_settings";
+    CHECK(khdays_native_vulkan_renderer_draw(&package, 2, &out));
+    CHECK(last_scale == 6 && raster_calls == 0 && out.upper_height == 1152);
+    CHECK(out.upper_width == 2046);
+    CHECK(out.title_settings);
+    settings_action = "unrelated_action";
+    CHECK(khdays_native_vulkan_renderer_draw(&package, 2, &out));
+    CHECK(!out.title_settings);
+    settings_action = "open_settings";
+    package.situation.title_valid = 0;
+    CHECK(khdays_native_vulkan_renderer_draw(&package, 2, &out));
+    CHECK(!out.title_settings); /* A stale/misplaced mod button cannot own gameplay. */
+    settings_action = NULL;
+    CHECK(khdays_native_vulkan_renderer_draw(&package, 2, &out));
+    CHECK(!out.title_settings);
+
+    /* Movie frames have no 3D, but carry full-resolution changing textures.
+     * Both the one-screen and original two-screen routes retain HD detail. */
+    reset();
+    package.wants |= KHDAYS_WANT_MOVIE;
+    package.situation.movie = 1;
+    CHECK(khdays_native_vulkan_renderer_draw(&package, 2, &out));
+    CHECK(last_scale == 5 && raster_calls == 0 && out.upper_width == 1280);
+    CHECK(out.upper_height == 960);
+    one_screen = 1;
+    CHECK(khdays_native_vulkan_renderer_draw(&package, 2, &out));
+    CHECK(last_scale == 5 && raster_calls == 0 && out.output_layout == 5);
+
+    /* Gameplay keeps its requested budget after the HD cutscene ends. */
+    package.situation.movie = 0; /* WANT_MOVIE stays set for kept VRAM. */
+    package.wants |= KHDAYS_WANT_3D;
+    package.info[0].is3d = 1;
+    CHECK(khdays_native_vulkan_renderer_draw(&package, 2, &out));
+    CHECK(last_scale == 2 && raster_calls == 1);
+    antialiasing = 2;
+    CHECK(khdays_native_vulkan_renderer_draw(&package, 4, &out));
+    CHECK(last_scale == 8);
+    antialiasing = 3;
+    CHECK(!khdays_native_vulkan_renderer_draw(&package, 4, &out));
 
     /* Invalid structural state fails before entering a compositor. */
     reset();

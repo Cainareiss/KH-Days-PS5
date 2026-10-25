@@ -11,6 +11,7 @@
 #include "clock.h"
 #include "sound_bridge.h"
 #include "sound_output.h"
+#include "graphics_menu_ps5.h"
 #include "profile.h"
 #include "runtime/input/input.h"
 #include "sound/mix_ds.h"
@@ -38,6 +39,8 @@ static double previous_poll;
 static int layout_chord;
 extern void khdays_ps5_video_cycle_layout(void);
 static atomic_bool initialized;
+static atomic_bool settings_menu_active;
+static atomic_bool title_settings_available;
 static atomic_bool audio_open;
 static atomic_bool paused;
 static atomic_bool muted;
@@ -46,11 +49,15 @@ static pthread_t sound_thread;
 static int sound_joinable;
 static int16_t ring[AUDIO_CAPACITY * 2u];
 static unsigned ring_read, ring_count;
+static int16_t movie_ring[AUDIO_CAPACITY * 2u];
+static unsigned movie_ring_read, movie_ring_count;
 static int needs_lead = 1;
 static int input_format; /* 0 unset, 1 DS PCM16, 2 native-rate float */
 static int have_previous;
 static int16_t previous_sample[2];
 static unsigned resample_phase;
+static uint32_t menu_buttons;
+static uint32_t last_pad_buttons, suppressed_pad_buttons;
 
 static float clamp_axis(float value)
 {
@@ -93,6 +100,9 @@ void khdays_ps5_host_io_poll(void)
         return;
     }
     pad_poll(&pad);
+    last_pad_buttons = pad.held;
+    suppressed_pad_buttons &= pad.held;
+    pad.held &= ~suppressed_pad_buttons;
     const int chord = (pad.held & (PAD_L3 | PAD_R3)) == (PAD_L3 | PAD_R3);
     if (chord && !layout_chord) khdays_ps5_video_cycle_layout();
     layout_chord = chord;
@@ -110,7 +120,8 @@ void khdays_ps5_host_io_poll(void)
     next.walk_speed = 50;
     if (pad.held & PAD_CIRCLE) next.ds_buttons |= KHDAYS_KEY_A;
     if (pad.held & PAD_CROSS) next.ds_buttons |= KHDAYS_KEY_B;
-    if (pad.held & PAD_TRIANGLE) next.ds_buttons |= KHDAYS_KEY_X;
+    if ((pad.held & PAD_TRIANGLE) && !atomic_load(&title_settings_available))
+        next.ds_buttons |= KHDAYS_KEY_X;
     if (pad.held & PAD_SQUARE) next.ds_buttons |= KHDAYS_KEY_Y;
     if (pad.held & PAD_OPTIONS) next.ds_buttons |= KHDAYS_KEY_START;
     if (pad.held & PAD_L3) next.ds_buttons |= KHDAYS_KEY_SELECT;
@@ -120,6 +131,16 @@ void khdays_ps5_host_io_poll(void)
     if (pad.held & PAD_DOWN) next.ds_buttons |= KHDAYS_KEY_DOWN;
     if (pad.held & PAD_LEFT) next.ds_buttons |= KHDAYS_KEY_LEFT;
     if (pad.held & PAD_RIGHT) next.ds_buttons |= KHDAYS_KEY_RIGHT;
+
+    menu_buttons = 0;
+    if (pad.held & PAD_UP) menu_buttons |= KHDAYS_PS5_MENU_UP;
+    if (pad.held & PAD_DOWN) menu_buttons |= KHDAYS_PS5_MENU_DOWN;
+    if (pad.held & PAD_LEFT) menu_buttons |= KHDAYS_PS5_MENU_LEFT;
+    if (pad.held & PAD_RIGHT) menu_buttons |= KHDAYS_PS5_MENU_RIGHT;
+    if (pad.held & PAD_CIRCLE) menu_buttons |= KHDAYS_PS5_MENU_CIRCLE;
+    if (pad.held & PAD_CROSS) menu_buttons |= KHDAYS_PS5_MENU_CROSS;
+    if (pad.held & PAD_OPTIONS) menu_buttons |= KHDAYS_PS5_MENU_OPTIONS;
+    if (pad.held & PAD_TRIANGLE) menu_buttons |= KHDAYS_PS5_MENU_TRIANGLE;
 
     next.ds_buttons_field = next.ds_buttons;
     if (enhancements & KHDAYS_ENH_DPAD_COMMAND_MENU) {
@@ -165,6 +186,12 @@ void khdays_ps5_host_io_poll(void)
     }
     next.touch_x = (uint16_t)touch_x;
     next.touch_y = (uint16_t)touch_y;
+    if (atomic_load(&settings_menu_active)) {
+        const uint32_t generation = next.generation;
+        memset(&next, 0, sizeof(next));
+        next.generation = generation;
+        next.ui_open = 1;
+    }
     if (atomic_load(&paused)) {
         const uint32_t generation = next.generation;
         memset(&next, 0, sizeof(next));
@@ -172,6 +199,34 @@ void khdays_ps5_host_io_poll(void)
         next.ui_open = 1;
     }
     snapshot = next;
+    pthread_mutex_unlock(&input_lock);
+}
+
+uint32_t khdays_ps5_host_io_menu_buttons(void)
+{
+    khdays_ps5_host_io_poll();
+    pthread_mutex_lock(&input_lock);
+    const uint32_t buttons = menu_buttons;
+    pthread_mutex_unlock(&input_lock);
+    return buttons;
+}
+
+void khdays_ps5_host_io_title_settings(int available)
+{
+    atomic_store(&title_settings_available, available != 0);
+}
+
+void khdays_ps5_host_io_settings_menu(int active)
+{
+    pthread_mutex_lock(&input_lock);
+    if (!active) suppressed_pad_buttons |= last_pad_buttons;
+    atomic_store(&settings_menu_active, active != 0);
+    if (active) {
+        const uint32_t generation = snapshot.generation;
+        memset(&snapshot, 0, sizeof(snapshot));
+        snapshot.generation = generation;
+        snapshot.ui_open = 1;
+    }
     pthread_mutex_unlock(&input_lock);
 }
 
@@ -208,6 +263,7 @@ int khdays_host_touch(int *x, int *y)
 static void reset_audio(void)
 {
     ring_read = ring_count = 0;
+    movie_ring_read = movie_ring_count = 0;
     needs_lead = 1;
     input_format = have_previous = 0;
     resample_phase = 0;
@@ -243,17 +299,32 @@ static void audio_fill(int16_t *frames, int count, void *unused)
     (void)unused;
     if (frames == NULL || count <= 0) return;
     pthread_mutex_lock(&audio_lock);
-    const int silent = atomic_load(&muted) || atomic_load(&paused);
+    const int game_silent = atomic_load(&muted) || atomic_load(&paused);
+    const int all_silent = atomic_load(&paused);
     for (int i = 0; i < count; ++i) {
+        int32_t left = 0, right = 0;
         if (ring_count != 0) {
-            frames[2 * i] = silent ? 0 : ring[2u * ring_read];
-            frames[2 * i + 1] = silent ? 0 : ring[2u * ring_read + 1u];
+            if (!game_silent) {
+                left += ring[2u * ring_read];
+                right += ring[2u * ring_read + 1u];
+            }
             ring_read = (ring_read + 1u) % AUDIO_CAPACITY;
             --ring_count;
-        } else {
-            frames[2 * i] = frames[2 * i + 1] = 0;
+        } else if (!game_silent) {
             needs_lead = 1;
         }
+        if (!all_silent && movie_ring_count != 0) {
+            left += movie_ring[2u * movie_ring_read];
+            right += movie_ring[2u * movie_ring_read + 1u];
+            movie_ring_read = (movie_ring_read + 1u) % AUDIO_CAPACITY;
+            --movie_ring_count;
+        }
+        if (left > INT16_MAX) left = INT16_MAX;
+        if (left < INT16_MIN) left = INT16_MIN;
+        if (right > INT16_MAX) right = INT16_MAX;
+        if (right < INT16_MIN) right = INT16_MIN;
+        frames[2 * i] = all_silent ? 0 : (int16_t)left;
+        frames[2 * i + 1] = all_silent ? 0 : (int16_t)right;
     }
     pthread_mutex_unlock(&audio_lock);
 }
@@ -289,6 +360,30 @@ void khdays_host_audio_float(const float *frames, int count)
     if (prepare_audio(2)) {
         for (int i = 0; i < count; ++i) enqueue(pcm16(frames[2 * i]), pcm16(frames[2 * i + 1]));
     }
+    pthread_mutex_unlock(&audio_lock);
+}
+
+void khdays_ps5_host_io_movie_audio(const float *frames, int count, float gain)
+{
+    if (frames == NULL || count <= 0 || !atomic_load(&audio_open)) return;
+    if (gain < 0.0f) gain = 0.0f;
+    if (gain > 1.0f) gain = 1.0f;
+    pthread_mutex_lock(&audio_lock);
+    if (!atomic_load(&paused)) {
+        for (int i = 0; i < count && movie_ring_count < AUDIO_CAPACITY; ++i) {
+            const unsigned at = (movie_ring_read + movie_ring_count) % AUDIO_CAPACITY;
+            movie_ring[2u * at] = pcm16(frames[2 * i] * gain);
+            movie_ring[2u * at + 1u] = pcm16(frames[2 * i + 1] * gain);
+            ++movie_ring_count;
+        }
+    }
+    pthread_mutex_unlock(&audio_lock);
+}
+
+void khdays_ps5_host_io_movie_audio_stop(void)
+{
+    pthread_mutex_lock(&audio_lock);
+    movie_ring_read = movie_ring_count = 0;
     pthread_mutex_unlock(&audio_lock);
 }
 
@@ -371,6 +466,10 @@ int khdays_ps5_host_io_init(void)
         previous_poll = 0.0;
         atomic_store(&paused, 0);
         atomic_store(&muted, 0);
+        atomic_store(&settings_menu_active, 0);
+        atomic_store(&title_settings_available, 0);
+        menu_buttons = 0;
+        last_pad_buttons = suppressed_pad_buttons = 0;
         if (!pad_open()) fprintf(stderr, "khdays-native: waiting for the player's controller\n");
         pthread_mutex_unlock(&input_lock);
         khdays_sound_output_open();
@@ -392,6 +491,8 @@ void khdays_ps5_host_io_shutdown(void)
      * neither input polling nor the sound worker acquires lifecycle_lock. */
     pthread_mutex_lock(&input_lock);
     atomic_store(&initialized, 0);
+    atomic_store(&title_settings_available, 0);
+    last_pad_buttons = suppressed_pad_buttons = 0;
     memset(&snapshot, 0, sizeof(snapshot));
     pthread_mutex_unlock(&input_lock);
     atomic_store(&sound_running, 0);
