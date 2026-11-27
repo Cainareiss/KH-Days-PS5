@@ -22,6 +22,10 @@ submódulo `khdays-decomp` para `93535afd7ca082f3d856bbf1cadae65be16d44ba`.
 - **Renderer Vulkan:** continua usando os shaders SPIR-V e o backend Vulkan do
   PS5. A preparação remove apenas os wrappers de janela SDL acrescentados na
   versão de PC; não copia o renderer de janela/SDL para o console.
+- **ROM norte-americana:** o upstream passa a registrar também a ROM YKGE. Isso
+  é útil para ampliar compatibilidade, mas o fluxo PS5 continua validando a
+  edição europeia YKGP até que os dados derivados da ROM americana sejam
+  regenerados e testados separadamente.
 - **Correções de jogo e assets:** correções de missões, salas, pausa, áudio,
   modelos e carregamento de recursos devem ser avaliadas conforme os arquivos
   que o runtime PS5 realmente compila. Recursos exclusivos de KH2 não são
@@ -63,3 +67,7 @@ scripts de aquisição/build e o submódulo decompilado, compilar o conjunto rea
 com o SDK PS5, resolver os erros de integração e fazer regressão em hardware.
 Somente então devem ser ativadas, uma a uma, as melhorias compatíveis com
 358/2 Days — mantendo fora as features exclusivas de KH2 e os serviços de PC.
+
+O README e a lista de ROMs suportadas do upstream descrevem as opções gráficas,
+UI e gamepads da revisão corrente: <https://github.com/Yokimitsuro/khdays-port>
+e <https://github.com/Yokimitsuro/khdays-port/blob/main/tools/supported_roms.json>.
