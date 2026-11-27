@@ -53,6 +53,125 @@ def host_environment() -> dict[str, str]:
 
 
 class RuntimePreparation(unittest.TestCase):
+    def test_posix_atomic_set_returns_previous_value(self) -> None:
+        compiler = shutil.which("cc") or shutil.which("clang")
+        if not compiler:
+            self.skipTest("a host C compiler is required")
+        with tempfile.TemporaryDirectory(prefix="khdays-atomic-contract-") as temporary:
+            binary = Path(temporary) / "atomic-contract"
+            built = subprocess.run(
+                [compiler, "-std=c11", "-pthread",
+                 "-I", str(ROOT / "native/ps5"),
+                 str(ROOT / "native/ps5/runtime_posix.c"),
+                 str(ROOT / "tests/native_ps5_atomic_contract.c"),
+                 "-o", str(binary)],
+                capture_output=True, text=True, timeout=120)
+            self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
+            ran = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30)
+            self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
+
+    def test_v015_mod_install_cache_uses_c11_atomics(self) -> None:
+        source = '''#include <SDL3/SDL_atomic.h>
+static SDL_AtomicInt state[2];
+int get(void) { return SDL_GetAtomicInt(&state[0]); }
+void set(int value) { SDL_SetAtomicInt(&state[0], value); }
+int exchange(int value) { return SDL_SetAtomicInt(&state[0], value); }
+'''
+        adapted = ADAPTER.adapt("runtime/mods/installed.c", source)
+        self.assertIn("#include <stdatomic.h>", adapted)
+        self.assertIn("static atomic_int state[2];", adapted)
+        self.assertIn("atomic_load(&state[0])", adapted)
+        self.assertIn("khdays_posix_set_atomic_int(&state[0], value)", adapted)
+        self.assertIn("return khdays_posix_set_atomic_int(&state[0], value)", adapted)
+        self.assertNotIn("SDL_", adapted)
+
+    def test_v015_sdl_init_state_maps_to_ps5_once_contract(self) -> None:
+        source = '''#include <SDL3/SDL.h>
+static SDL_InitState once;
+int ready(void) {
+    if (SDL_ShouldInit(&once)) {
+        SDL_SetInitialized(&once, 1);
+        return 1;
+    }
+    return 0;
+}
+size_t copy(char *dst, const char *src, size_t size) {
+    return SDL_strlcpy(dst, src, size);
+}
+'''
+        adapted = ADAPTER.adapt("runtime/net/net_session.c", source)
+        self.assertIn("KhdaysPosixInitState once;", adapted)
+        self.assertIn("khdays_posix_should_init(&once)", adapted)
+        self.assertIn("khdays_posix_set_initialized(&once, 1)", adapted)
+        self.assertIn("khdays_posix_strlcpy(dst, src, size)", adapted)
+        self.assertNotIn("SDL_", adapted)
+
+    def test_v015_plugin_thread_identity_maps_to_posix_token(self) -> None:
+        source = '''#include <SDL3/SDL.h>
+static SDL_ThreadID game_thread;
+void mark(void) { game_thread = SDL_GetCurrentThreadID(); }
+int on_game_thread(void) { return game_thread != 0 && SDL_GetCurrentThreadID() == game_thread; }
+'''
+        adapted = ADAPTER.adapt("runtime/plugins/interfaces.c", source)
+        self.assertIn("static uint64_t game_thread;", adapted)
+        self.assertIn("game_thread = khdays_posix_thread_id();", adapted)
+        self.assertIn("khdays_posix_thread_id() == game_thread", adapted)
+        self.assertNotIn("SDL_", adapted)
+
+    def test_v015_performance_counter_seed_uses_monotonic_clock(self) -> None:
+        source = "unsigned long long seed = SDL_GetPerformanceCounter() ^ (unsigned long long)time(NULL);"
+        adapted = ADAPTER.adapt("runtime/scripts/time_link.c", source)
+        self.assertIn("khdays_posix_ticks_ns()", adapted)
+        self.assertNotIn("SDL_", adapted)
+
+    def test_v015_performance_counter_frequency_matches_nanosecond_clock(self) -> None:
+        source = "uint64_t frequency = SDL_GetPerformanceFrequency();"
+        adapted = ADAPTER.adapt("host/render/gpu_present.c", source)
+        self.assertIn("khdays_posix_ticks_frequency()", adapted)
+        self.assertNotIn("SDL_", adapted)
+
+    def test_v015_button_icons_select_dualsense_family_without_desktop_sdl(self) -> None:
+        source = '''#include <SDL3/SDL.h>
+static const char *family(SDL_Gamepad *pad) {
+    switch (SDL_GetGamepadType(pad)) {
+    case SDL_GAMEPAD_TYPE_PS5: return "playstation";
+    default: return NULL;
+    }
+}
+uint32_t signature(SDL_Gamepad *pad) { return SDL_GetGamepadID(pad); }
+void settings_types(SDL_Window *window, SDL_FRect *rect) { (void)window; (void)rect; }
+'''
+        adapted = ADAPTER.adapt("ui/button_icons.c", source)
+        self.assertIn("KhdaysPosixGamepad *pad", adapted)
+        self.assertIn("khdays_posix_gamepad_type(pad)", adapted)
+        self.assertIn("KHDAYS_POSIX_GAMEPAD_TYPE_PS5", adapted)
+        self.assertIn("khdays_posix_gamepad_id(pad)", adapted)
+        self.assertIn("KhdaysPosixWindow *window", adapted)
+        self.assertIn("KhdaysPosixFRect *rect", adapted)
+        self.assertNotIn("SDL_", adapted)
+
+    def test_v015_plugin_loader_stays_disabled_but_stop_semaphore_is_portable(self) -> None:
+        source = '''#include <SDL3/SDL.h>
+static SDL_SharedObject *object;
+static SDL_Semaphore *stopped;
+static SDL_AtomicInt stop_asked;
+void load(const char *path) { object = SDL_LoadObject(path); }
+int stop_requested(void) { return SDL_GetAtomicInt(&stop_asked); }
+void stop(void) { SDL_SignalSemaphore(stopped); }
+int wait_stop(int ms) { return SDL_WaitSemaphoreTimeout(stopped, ms); }
+void unload(void) { SDL_UnloadObject(object); }
+const char *error(void) { return SDL_GetError(); }
+'''
+        adapted = ADAPTER.adapt("runtime/plugins/plugins.c", source)
+        self.assertIn("KhdaysPosixSharedObject *object", adapted)
+        self.assertIn("KhdaysPosixSemaphore *stopped", adapted)
+        self.assertIn("khdays_posix_plugin_load_unsupported(path)", adapted)
+        self.assertIn("khdays_posix_semaphore_wait_timeout(stopped, ms)", adapted)
+        self.assertIn("#include <stdatomic.h>", adapted)
+        self.assertIn('#include "runtime_posix.h"', adapted)
+        self.assertIn("atomic_load(&stop_asked)", adapted)
+        self.assertNotIn("SDL_", adapted)
+
     def test_ps5_hd_movie_paths_use_mpeg_without_double_subtitle_compositing(self) -> None:
         source = r'''snprintf(relative, sizeof(relative), "movies/hd%s.mp4", movie);
 snprintf(file, sizeof(file), "data/cutscenes/cinematics/hd%s.mp4", movie);
@@ -62,6 +181,26 @@ snprintf(file, sizeof(file), "data/cutscenes/cinematics/hd%s.mp4", movie);
         self.assertIn('"/app0/data/cutscenes/cinematics/hd%s.mpg"', adapted)
         self.assertIn('pre-composited', adapted)
         self.assertNotIn('khdays_movie_subtitles_load(', adapted)
+
+    def test_v015_multi_part_movie_paths_use_mpeg_without_double_subtitles(self) -> None:
+        source = '''snprintf(relative, sizeof(relative), "movies/hd%s.mp4", movie);
+snprintf(parts[0].file, sizeof(parts[0].file),
+         "data/cutscenes/cinematics/%s.mp4", parts[0].stem);
+snprintf(p->file, sizeof(p->file), "data/cutscenes/cinematics/%s.mp4", stem);
+snprintf(relative, sizeof(relative), "cutscenes/cinematics/%s.mp4", stem);
+snprintf(file, size, "data/cutscenes/cinematics/%s.mp4", stem);
+khdays_movie_subtitles_load(parts[part_next].subtitles,
+                            khdays_language_wanted() != 0 ? khdays_language_wanted() : GetLanguage());
+khdays_movie_subtitles_load(strncmp(stem, "hd", 2) == 0 ? stem + 2 : stem,
+                            khdays_language_wanted() != 0 ? khdays_language_wanted() : GetLanguage());
+'''
+        adapted = ADAPTER.adapt("runtime/movies/movie_hd.c", source)
+        self.assertIn('"movies/hd%s.mpg"', adapted)
+        self.assertIn('"/app0/data/cutscenes/cinematics/%s.mpg"', adapted)
+        self.assertIn('"cutscenes/cinematics/%s.mpg"', adapted)
+        self.assertNotIn(".mp4", adapted)
+        self.assertNotIn("khdays_movie_subtitles_load(", adapted)
+        self.assertEqual(adapted.count("pre-composited"), 2)
 
     def test_input_layout_chord_preserves_other_controls_and_audio(self) -> None:
         port = ROOT / ".cache/khdays-native-v0.1.1/port"

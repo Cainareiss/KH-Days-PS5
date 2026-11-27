@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 /* Runtime services for FreeBSD/PS5. Windows-shaped names are private source
  * compatibility for the pinned upstream; no Win32 DLL or SDL is required. */
 #include "runtime_posix.h"
@@ -5,6 +7,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <limits.h>
+#include <stdatomic.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -77,6 +80,7 @@ uint64_t khdays_posix_ticks_ns(void)
     if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) abort();
     return (uint64_t)now.tv_sec * UINT64_C(1000000000) + (uint64_t)now.tv_nsec;
 }
+uint64_t khdays_posix_ticks_frequency(void) { return UINT64_C(1000000000); }
 int QueryPerformanceCounter(LARGE_INTEGER *v) { v->QuadPart = (int64_t)khdays_posix_ticks_ns(); return 1; }
 int QueryPerformanceFrequency(LARGE_INTEGER *v) { v->QuadPart = INT64_C(1000000000); return 1; }
 void GetLocalTime(SYSTEMTIME *v)
@@ -92,6 +96,121 @@ void Sleep(DWORD ms)
 {
     struct timespec pause = {(time_t)(ms / 1000u), (long)(ms % 1000u) * 1000000L};
     while (nanosleep(&pause, &pause) != 0 && errno == EINTR) {}
+}
+
+/* SDL_ShouldInit serializes competing initialization attempts. 0 is
+ * uninitialized, 1 is in progress, 2 is initialized. A failed attempt returns
+ * the state to 0 so a waiter can retry, matching SDL_SetInitialized(false). */
+int khdays_posix_should_init(KhdaysPosixInitState *state)
+{
+    for (;;) {
+        const LONG current = __atomic_load_n(&state->status, __ATOMIC_ACQUIRE);
+        if (current == 2) return 0;
+        if (current == 0) {
+            LONG expected = 0;
+            if (__atomic_compare_exchange_n(&state->status, &expected, 1, 0,
+                                            __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
+                return 1;
+        }
+        Sleep(1);
+    }
+}
+
+uint64_t khdays_posix_thread_id(void)
+{
+    static volatile uint64_t next_id = 1;
+    static _Thread_local uint64_t current_id;
+    if (current_id == 0) {
+        current_id = __atomic_fetch_add(&next_id, UINT64_C(1), __ATOMIC_RELAXED);
+        if (current_id == 0)
+            current_id = __atomic_fetch_add(&next_id, UINT64_C(1), __ATOMIC_RELAXED);
+    }
+    return current_id;
+}
+
+void khdays_posix_set_initialized(KhdaysPosixInitState *state, int initialized)
+{
+    __atomic_store_n(&state->status, initialized ? 2 : 0, __ATOMIC_RELEASE);
+}
+
+int khdays_posix_set_atomic_int(void *target, int value)
+{
+    return atomic_exchange_explicit((atomic_int *)target, value, memory_order_seq_cst);
+}
+
+size_t khdays_posix_strlcpy(char *destination, const char *source, size_t size)
+{
+    if (source == NULL) source = "";
+    const size_t length = strlen(source);
+    if (destination != NULL && size > 0) {
+        const size_t copied = length < size - 1 ? length : size - 1;
+        if (copied > 0) memcpy(destination, source, copied);
+        destination[copied] = '\0';
+    }
+    return length;
+}
+
+/* The console build deliberately does not load arbitrary native plug-in
+ * binaries. The upstream setting is off by default; static plug-ins remain
+ * available to a build which includes them explicitly. */
+KhdaysPosixSharedObject *khdays_posix_plugin_load_unsupported(const char *path)
+{
+    (void)path;
+    return NULL;
+}
+
+void *khdays_posix_plugin_symbol_unsupported(KhdaysPosixSharedObject *object, const char *name)
+{
+    (void)object;
+    (void)name;
+    return NULL;
+}
+
+void khdays_posix_plugin_unload_unsupported(KhdaysPosixSharedObject *object) { (void)object; }
+const char *khdays_posix_plugin_error(void) { return "dynamic native plug-ins are disabled on PS5"; }
+
+KhdaysPosixSemaphore *khdays_posix_semaphore_create(uint32_t initial_value)
+{
+    KhdaysPosixSemaphore *semaphore = malloc(sizeof(*semaphore));
+    if (semaphore == NULL) return NULL;
+    if (sem_init(semaphore, 0, initial_value) != 0) {
+        free(semaphore);
+        return NULL;
+    }
+    return semaphore;
+}
+
+void khdays_posix_semaphore_destroy(KhdaysPosixSemaphore *semaphore)
+{
+    if (semaphore != NULL) {
+        sem_destroy(semaphore);
+        free(semaphore);
+    }
+}
+
+int khdays_posix_semaphore_signal(KhdaysPosixSemaphore *semaphore)
+{
+    return semaphore != NULL && sem_post(semaphore) == 0;
+}
+
+int khdays_posix_semaphore_wait_timeout(KhdaysPosixSemaphore *semaphore, int32_t timeout_ms)
+{
+    if (semaphore == NULL) return 0;
+    if (timeout_ms < 0) {
+        while (sem_wait(semaphore) != 0) {
+            if (errno != EINTR) return 0;
+        }
+        return 1;
+    }
+    struct timespec until;
+    if (clock_gettime(CLOCK_REALTIME, &until) != 0) return 0;
+    until.tv_sec += timeout_ms / 1000;
+    until.tv_nsec += (long)(timeout_ms % 1000) * 1000000L;
+    if (until.tv_nsec >= 1000000000L) { ++until.tv_sec; until.tv_nsec -= 1000000000L; }
+    while (sem_timedwait(semaphore, &until) != 0) {
+        if (errno != EINTR) return 0;
+    }
+    return 1;
 }
 
 static void *thread_main(void *argument)

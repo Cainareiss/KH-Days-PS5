@@ -8,13 +8,13 @@
 
 #include <string.h>
 
-/* SDL_Gamepad is intentionally opaque in the compatibility header.  The
+/* Gamepad is intentionally opaque in the compatibility header. The
  * shared one-screen code only passes this token to SDL_GetGamepadType(). */
-struct SDL_Gamepad {
+struct KhdaysPosixGamepad {
     int ps5;
 };
 
-static SDL_Gamepad ps5_gamepad = {1};
+static KhdaysPosixGamepad ps5_gamepad = {1};
 static KhdaysProfile ps5_profile;
 static int ps5_profile_ready;
 
@@ -51,9 +51,19 @@ const KhdaysProfile *khdays_devices_profile(void)
     return &ps5_profile;
 }
 
-SDL_Gamepad *khdays_devices_gamepad(void)
+KhdaysPosixGamepad *khdays_devices_gamepad(void)
 {
     return &ps5_gamepad;
+}
+
+KhdaysPosixGamepadType khdays_posix_gamepad_type(KhdaysPosixGamepad *gamepad)
+{
+    return gamepad != NULL ? KHDAYS_POSIX_GAMEPAD_TYPE_PS5 : KHDAYS_POSIX_GAMEPAD_TYPE_UNKNOWN;
+}
+
+uint32_t khdays_posix_gamepad_id(KhdaysPosixGamepad *gamepad)
+{
+    return gamepad != NULL ? 1u : 0u;
 }
 
 int khdays_devices_pad_in_use(void)

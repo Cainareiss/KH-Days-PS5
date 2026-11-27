@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <strings.h>
 #include <pthread.h>
+#include <semaphore.h>
 
 typedef int32_t LONG;
 typedef int64_t LONG64;
@@ -21,6 +22,32 @@ typedef struct { int64_t QuadPart; } LARGE_INTEGER;
 typedef struct { unsigned wYear, wMonth, wDay, wHour, wMinute, wSecond; } SYSTEMTIME;
 typedef pthread_mutex_t SRWLOCK;
 typedef pthread_cond_t CONDITION_VARIABLE;
+/* SDL_InitState's lifecycle is needed by the portable runtime's one-time
+ * initialization helpers. Keep only the atomic state on PS5; there is no SDL
+ * thread ID or reserved desktop field in this adapter. */
+typedef struct { volatile LONG status; } KhdaysPosixInitState;
+typedef struct KhdaysPosixGamepad KhdaysPosixGamepad;
+typedef struct KhdaysPosixEvent KhdaysPosixEvent;
+typedef struct KhdaysPosixRenderer KhdaysPosixRenderer;
+typedef struct KhdaysPosixWindow KhdaysPosixWindow;
+typedef struct KhdaysPosixFRect KhdaysPosixFRect;
+typedef void KhdaysPosixSharedObject;
+typedef sem_t KhdaysPosixSemaphore;
+typedef int KhdaysPosixGamepadButton;
+typedef enum {
+    KHDAYS_POSIX_GAMEPAD_TYPE_UNKNOWN,
+    KHDAYS_POSIX_GAMEPAD_TYPE_XBOX360,
+    KHDAYS_POSIX_GAMEPAD_TYPE_XBOXONE,
+    KHDAYS_POSIX_GAMEPAD_TYPE_PS3,
+    KHDAYS_POSIX_GAMEPAD_TYPE_PS4,
+    KHDAYS_POSIX_GAMEPAD_TYPE_PS5,
+    KHDAYS_POSIX_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO,
+    KHDAYS_POSIX_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_LEFT,
+    KHDAYS_POSIX_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT,
+    KHDAYS_POSIX_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR,
+    KHDAYS_POSIX_GAMEPAD_TYPE_GAMECUBE
+} KhdaysPosixGamepadType;
+#define KHDAYS_POSIX_GAMEPAD_BUTTON_INVALID (-1)
 #define SRWLOCK_INIT PTHREAD_MUTEX_INITIALIZER
 #define CONDITION_VARIABLE_INIT PTHREAD_COND_INITIALIZER
 #define WINAPI
@@ -73,6 +100,22 @@ DWORD GetEnvironmentVariableA(const char *name, char *output, DWORD size);
 int strncpy_s(char *destination, size_t size, const char *source, size_t count);
 int strncat_s(char *destination, size_t size, const char *source, size_t count);
 int fopen_s(FILE **file, const char *path, const char *mode);
+uint64_t khdays_posix_ticks_frequency(void);
+int khdays_posix_should_init(KhdaysPosixInitState *state);
+void khdays_posix_set_initialized(KhdaysPosixInitState *state, int initialized);
+int khdays_posix_set_atomic_int(void *target, int value);
+size_t khdays_posix_strlcpy(char *destination, const char *source, size_t size);
+uint64_t khdays_posix_thread_id(void);
+KhdaysPosixGamepadType khdays_posix_gamepad_type(KhdaysPosixGamepad *gamepad);
+uint32_t khdays_posix_gamepad_id(KhdaysPosixGamepad *gamepad);
+KhdaysPosixSharedObject *khdays_posix_plugin_load_unsupported(const char *path);
+void *khdays_posix_plugin_symbol_unsupported(KhdaysPosixSharedObject *object, const char *name);
+void khdays_posix_plugin_unload_unsupported(KhdaysPosixSharedObject *object);
+const char *khdays_posix_plugin_error(void);
+KhdaysPosixSemaphore *khdays_posix_semaphore_create(uint32_t initial_value);
+void khdays_posix_semaphore_destroy(KhdaysPosixSemaphore *semaphore);
+int khdays_posix_semaphore_signal(KhdaysPosixSemaphore *semaphore);
+int khdays_posix_semaphore_wait_timeout(KhdaysPosixSemaphore *semaphore, int32_t timeout_ms);
 
 /* The runtime's former SDL dependency here was only threading, ticks and
  * byte-file I/O. Keep those operations explicit rather than depending on a

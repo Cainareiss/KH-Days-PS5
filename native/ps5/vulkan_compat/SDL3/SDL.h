@@ -23,7 +23,7 @@ typedef SDL_GPUCommandBuffer SDL_GPUComputePass;
 typedef struct SDL_Texture SDL_Texture;
 typedef struct SDL_Renderer SDL_Renderer;
 typedef struct SDL_Event SDL_Event;
-typedef struct SDL_Gamepad SDL_Gamepad;
+typedef struct KhdaysPosixGamepad SDL_Gamepad;
 typedef enum SDL_GamepadButton { SDL_GAMEPAD_BUTTON_INVALID = -1 } SDL_GamepadButton;
 typedef enum SDL_GamepadType {
     SDL_GAMEPAD_TYPE_UNKNOWN,
