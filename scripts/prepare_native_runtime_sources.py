@@ -34,16 +34,69 @@ SDL_NAMES = {
     "SDL_CreateThread": "khdays_posix_thread_create",
     "SDL_WaitThread": "khdays_posix_thread_wait",
     "SDL_GetTicksNS": "khdays_posix_ticks_ns",
+    "SDL_GetPerformanceCounter": "khdays_posix_ticks_ns",
+    "SDL_GetPerformanceFrequency": "khdays_posix_ticks_frequency",
     "SDL_LoadFile": "khdays_posix_load_file",
     "SDL_SaveFile": "khdays_posix_save_file",
     "SDL_strncasecmp": "strncasecmp",
+    "SDL_strlcpy": "khdays_posix_strlcpy",
     "SDL_getenv": "getenv",
     "SDL_free": "free",
+    "SDL_AtomicInt": "atomic_int",
+    "SDL_GetAtomicInt": "atomic_load",
+    # SDL_SetAtomicInt returns the previous value (it is used to atomically
+    # claim mailbox slots), unlike C11 atomic_store, which returns void.
+    "SDL_SetAtomicInt": "khdays_posix_set_atomic_int",
+    "SDL_InitState": "KhdaysPosixInitState",
+    "SDL_ShouldInit": "khdays_posix_should_init",
+    "SDL_SetInitialized": "khdays_posix_set_initialized",
+    "SDL_Gamepad": "KhdaysPosixGamepad",
+    "SDL_GamepadButton": "KhdaysPosixGamepadButton",
+    "SDL_GamepadType": "KhdaysPosixGamepadType",
+    "SDL_Event": "KhdaysPosixEvent",
+    "SDL_Renderer": "KhdaysPosixRenderer",
+    "SDL_Window": "KhdaysPosixWindow",
+    "SDL_FRect": "KhdaysPosixFRect",
+    "SDL_GAMEPAD_BUTTON_INVALID": "KHDAYS_POSIX_GAMEPAD_BUTTON_INVALID",
+    "SDL_GAMEPAD_TYPE_UNKNOWN": "KHDAYS_POSIX_GAMEPAD_TYPE_UNKNOWN",
+    "SDL_GAMEPAD_TYPE_XBOX360": "KHDAYS_POSIX_GAMEPAD_TYPE_XBOX360",
+    "SDL_GAMEPAD_TYPE_XBOXONE": "KHDAYS_POSIX_GAMEPAD_TYPE_XBOXONE",
+    "SDL_GAMEPAD_TYPE_PS3": "KHDAYS_POSIX_GAMEPAD_TYPE_PS3",
+    "SDL_GAMEPAD_TYPE_PS4": "KHDAYS_POSIX_GAMEPAD_TYPE_PS4",
+    "SDL_GAMEPAD_TYPE_PS5": "KHDAYS_POSIX_GAMEPAD_TYPE_PS5",
+    "SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO": "KHDAYS_POSIX_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO",
+    "SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_LEFT": "KHDAYS_POSIX_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_LEFT",
+    "SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT": "KHDAYS_POSIX_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT",
+    "SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR": "KHDAYS_POSIX_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR",
+    "SDL_GAMEPAD_TYPE_GAMECUBE": "KHDAYS_POSIX_GAMEPAD_TYPE_GAMECUBE",
+    "SDL_GetGamepadType": "khdays_posix_gamepad_type",
+    "SDL_GetGamepadID": "khdays_posix_gamepad_id",
     "SDLCALL": "",
+}
+PLUGIN_SDL_NAMES = {
+    "SDL_ThreadID": "uint64_t",
+    "SDL_GetCurrentThreadID": "khdays_posix_thread_id",
+    "SDL_SharedObject": "KhdaysPosixSharedObject",
+    "SDL_LoadObject": "khdays_posix_plugin_load_unsupported",
+    "SDL_LoadFunction": "khdays_posix_plugin_symbol_unsupported",
+    "SDL_UnloadObject": "khdays_posix_plugin_unload_unsupported",
+    "SDL_Semaphore": "KhdaysPosixSemaphore",
+    "SDL_CreateSemaphore": "khdays_posix_semaphore_create",
+    "SDL_DestroySemaphore": "khdays_posix_semaphore_destroy",
+    "SDL_SignalSemaphore": "khdays_posix_semaphore_signal",
+    "SDL_WaitSemaphoreTimeout": "khdays_posix_semaphore_wait_timeout",
+    "SDL_GetError": "khdays_posix_plugin_error",
 }
 
 
 def adapt(relative: str, source: str) -> str:
+    uses_atomic_int = bool(re.search(r"\bSDL_(?:AtomicInt|GetAtomicInt|SetAtomicInt)\b", source))
+    if uses_atomic_int:
+        if "#include <SDL3/SDL_atomic.h>" not in source:
+            source = '#include <stdatomic.h>\n' + source
+        if '#include "runtime_posix.h"' not in source:
+            source = '#include "runtime_posix.h"\n' + source
+    source = source.replace('#include <SDL3/SDL_atomic.h>', '#include <stdatomic.h>')
     source = source.replace("#include <windows.h>", '#include "runtime_posix.h"')
     source = source.replace("#include <SDL3/SDL.h>", '#include "runtime_posix.h"')
     source = source.replace("#include <intrin.h>", "/* compiler return-address builtin; no MSVC intrinsics */")
@@ -59,6 +112,9 @@ def adapt(relative: str, source: str) -> str:
     source = re.sub(r"\bSDL_Thread\s*\*", "KhdaysPosixThread ", source)
     for old, new in SDL_NAMES.items():
         source = re.sub(rf"\b{re.escape(old)}\b", new, source)
+    if relative.startswith("runtime/plugins/"):
+        for old, new in PLUGIN_SDL_NAMES.items():
+            source = re.sub(rf"\b{re.escape(old)}\b", new, source)
     if relative == "hal/hal.h":
         source = re.sub(
             r"#if defined\(_WIN64\).*?#endif",
@@ -115,18 +171,31 @@ def adapt(relative: str, source: str) -> str:
         # desktop frontend continues to use the original MP4 files. The
         # prepared PS5 streams already contain their timed subtitle pixels, so
         # loading the overlay atlas here would draw every caption twice.
-        for before, after in {
+        replacements = {
             'movies/hd%s.mp4': 'movies/hd%s.mpg',
             'data/cutscenes/cinematics/hd%s.mp4': '/app0/data/cutscenes/cinematics/hd%s.mpg',
-        }.items():
-            if before not in source:
-                raise ValueError(f"movie_hd.c no longer contains expected path: {before}")
+            'data/cutscenes/cinematics/%s.mp4': '/app0/data/cutscenes/cinematics/%s.mpg',
+            'cutscenes/cinematics/%s.mp4': 'cutscenes/cinematics/%s.mpg',
+        }
+        original = source
+        for before, after in replacements.items():
             source = source.replace(before, after)
-        subtitle_load = '    khdays_movie_subtitles_load(movie, khdays_language_wanted() != 0 ? khdays_language_wanted() : GetLanguage());'
-        if subtitle_load not in source:
-            raise ValueError("movie_hd.c no longer contains the expected subtitle schedule load")
-        source = source.replace(subtitle_load,
-            '    /* PS5 MPEG cutscenes have timed subtitle pixels pre-composited. */', 1)
+        if 'movies/hd%s.mp4' not in original:
+            raise ValueError("movie_hd.c no longer contains the expected optional movie path")
+        if not any(path in original for path in (
+                'data/cutscenes/cinematics/hd%s.mp4',
+                'data/cutscenes/cinematics/%s.mp4')):
+            raise ValueError("movie_hd.c no longer contains a recognized packaged movie path")
+        # 0.1.1 has one call; newer upstreams load subtitles for every part of
+        # a scene. Prepared PS5 MPEGs already contain their timed subtitle
+        # pixels, so remove every call rather than leaving later parts doubled.
+        source, subtitle_calls = re.subn(
+            r'(?m)^([ \t]*)khdays_movie_subtitles_load\((?:[^()]|\([^()]*\))*\);',
+            r'\1/* PS5 MPEG cutscenes have timed subtitle pixels pre-composited. */',
+            source,
+        )
+        if subtitle_calls == 0:
+            raise ValueError("movie_hd.c no longer contains a recognized subtitle schedule load")
         # The loader does not promise /app0 as its working directory. Keep the
         # fallback absolute, and persist movie decisions even when upstream's
         # optional session log is disabled in a Release build.

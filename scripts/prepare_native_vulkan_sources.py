@@ -20,10 +20,14 @@ SHADERS = ("raster3d", "compose", "compose2d", "onescreen", "capture", "shrink")
 WINDOW_FUNCTIONS = {
     "gpu_raster3d": ("khdays_raster3d_texture", "khdays_raster3d_read"),
     "gfx_render": ("wrap", "khdays_gfx_render_picture", "khdays_gfx_render_texture",
-                   "khdays_gfx_render_captured", "khdays_gfx_render_read"),
+                   "khdays_gfx_render_captured", "khdays_gfx_render_read",
+                   "khdays_gfx_render_shop"),
     "gpu_hd": (),
 }
-WINDOW_NAMES = re.compile(r"\b(?:wrapped|wrapped_for|picture_wrapped|picture_for|held_wrapped|held_for)\b")
+WINDOW_NAMES = re.compile(
+    r"\b(?:wrapped|wrapped_for|picture_wrapped|picture_for|held_wrapped|held_for|"
+    r"spare_wrapped|spare_wrapped_for|shop_wrapped|shop_wrapped_for)\b"
+)
 
 
 def matching_brace(text: str, opened: int) -> int:
